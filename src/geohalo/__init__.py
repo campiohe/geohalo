@@ -6,11 +6,15 @@ from geohalo.downscale import (
 )
 from geohalo.geometry import PolygonSet
 from geohalo.grid import GridSpec
+from geohalo.weights import EmptyCoverageError, Weights, compute_weights
 
 __all__ = [
+    "EmptyCoverageError",
     "GridSpec",
     "PolygonSet",
+    "Weights",
     "build_downscale_operator",
+    "compute_weights",
     "downscale_plane",
     "refine_grid",
     "resolve_factor",
