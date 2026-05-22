@@ -1,3 +1,4 @@
+from geohalo.aggregate import aggregate
 from geohalo.downscale import (
     build_downscale_operator,
     downscale_plane,
@@ -13,6 +14,7 @@ __all__ = [
     "GridSpec",
     "PolygonSet",
     "Weights",
+    "aggregate",
     "build_downscale_operator",
     "compute_weights",
     "downscale_plane",
