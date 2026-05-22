@@ -9,10 +9,11 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/python-3.12%2B-3776ab.svg" alt="Python 3.12+"/>
-  <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff"/>
-  <img src="https://img.shields.io/badge/managed%20by-uv-de5fe9.svg" alt="Managed by uv"/>
-  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs welcome"/>
+  <a href="https://pypi.org/project/geohalo/"><img src="https://img.shields.io/pypi/v/geohalo.svg?color=3775a9&logo=pypi&logoColor=white" alt="PyPI"/></a>
+  <a href="https://pypi.org/project/geohalo/"><img src="https://img.shields.io/pypi/pyversions/geohalo.svg?color=3776ab&logo=python&logoColor=white" alt="Python versions"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/pypi/l/geohalo.svg?color=blue" alt="License: MIT"/></a>
+  <a href="https://github.com/campiohe/geohalo/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/campiohe/geohalo/release.yml?label=release&logo=github" alt="Release workflow"/></a>
+  <a href="https://github.com/astral-sh/uv"><img src="https://img.shields.io/badge/managed%20by-uv-de5fe9.svg?logo=astral&logoColor=white" alt="Managed by uv"/></a>
 </p>
 
 ---
