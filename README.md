@@ -64,6 +64,7 @@ uv add geohalo            # or: pip install geohalo
 Optional extras:
 
 - `redis` — for the `RedisWeightCache` backend
+- `matplotlib` — for the helpers in `geohalo.plot`
 
 ## Quickstart
 
