@@ -1,0 +1,80 @@
+line-length = 120
+target-version = "py312"
+
+[lint]
+extend-select = [
+    "E",
+    "F",
+    "I",
+    "W",
+    "ANN",
+    "ASYNC",
+    "S",
+    "BLE",
+    "B",
+    "A",
+    "C4",
+    "COM818",
+    "ISC",
+    "ICN",
+    "LOG015",
+    "G",
+    "PIE",
+    "T20",
+    "PT",
+    "Q",
+    "RSE",
+    "RET",
+    "SLF",
+    "SIM",
+    "TID",
+    "ARG",
+    "PTH",
+    "FLY",
+    "NPY",
+    "PD",
+    "N",
+    "PERF",
+    "PL",
+    "UP",
+    "FURB",
+    "RUF",
+    "TRY"
+]
+
+ignore = [
+    "ANN002",
+    "ANN003",
+    "ANN401",
+    "RET504",
+    "PLR2004",
+    "PLR0911",
+    "TRY003",
+    "S301",
+    "PD003",
+    "PD008",
+    "PD013",
+    "PD901",
+    "S603",
+    "B008",
+    "ICN003"
+]
+
+[lint.flake8-pytest-style]
+raises-require-match-for = ["BaseException", "Exception"]
+
+[lint.flake8-import-conventions.extend-aliases]
+"datetime" = "dt"
+"plotly.graph_objects" = "go"
+"xarray" = "xr"
+"sqlalchemy" = "sa"
+"pickle" = "pk"
+"multiprocessing" = "mp"
+"geopandas" = "gpd"
+
+[lint.isort]
+combine-as-imports = true
+
+[lint.per-file-ignores]
+"tests/**" = ["S101", "ANN", "PLR0913", "SLF001", "PLR0915", "PLR2004", "S311"]
+"benchmarks/**" = ["T201", "ANN", "RUF001", "RUF003", "S607", "PERF401", "SIM108", "PLW3301", "RUF046"]
