@@ -107,6 +107,63 @@ SHA-256 digest, the polygon set's SHA-256 digest, and the downscale factor —
 so any change to the grid, the polygons, or the downscaling settings
 invalidates the cache implicitly.
 
+## Performance
+
+The headline claim — *millisecond-scale aggregation in the hot path* — is
+backed by the suite under [`benchmarks/`](benchmarks/run.py). All rows time
+operations against the GADM Brazil L2 polygons (~5570 munis) on a synthetic
+0.25° grid covering Brazil (160×160 = 25,600 cells). Re-run with
+`uv run python -m benchmarks.run`.
+
+<!-- BENCHMARK START -->
+
+Environment: Python 3.14.4 on Linux x86_64, geohalo @ 90c432b, scipy 1.17.1, numpy 2.4.6, shapely 2.1.2, xarray 2026.4.0, exactextract 0.3.0.
+Grid: 0.25° over Brazil bbox (-74, -34, -34, 6) — 160×160 = 25,600 cells.
+Polygons: GADM Brazil L2 (~5570 total).
+Timing: 2 warmup + 7 iterations per row, reporting median (p10 – p90).
+Memory: `CSR mem` is the in-RAM size of the sparse weight matrix; `blob size` is the serialized cache payload (what `LocalWeightCache`/`RedisWeightCache` writes); `ΔRSS` is the process-RSS high-water-mark delta observed during that row.
+
+Batch shapes follow ECMWF forecast conventions: `member=50` is a 50-perturbed-member ensemble (one slice per member), and `step` is forecast lead time (e.g., `step=40` is 40 lead times — a 10-day forecast sampled at 6 h). A `(member=50, step=10)` DataArray therefore contains 500 forecast slices stacked along two batch dims; `aggregate` flattens them, runs one sparse · dense matmul, and reshapes the result.
+
+### `compute_weights` (one-time per (grid, polygons))
+
+| n_polygons | factor | median  (p10 – p90)       | CSR mem | blob size | ΔRSS     |
+| ---------- | ------ | ------------------------- | ------- | --------- | -------- |
+| 50         | 1      | 9.1 ms  (8.7 ms – 9.7 ms) | 4 KB    | 6 KB      | 4.0 MB   |
+| 50         | 4      | 170 ms  (165 ms – 180 ms) | 12 KB   | 14 KB     | 185.7 MB |
+| 507        | 1      | 119 ms  (115 ms – 122 ms) | 39 KB   | 53 KB     | 0 B      |
+| 507        | 4      | 297 ms  (287 ms – 344 ms) | 122 KB  | 136 KB    | 14.6 MB  |
+| 5571       | 1      | 1.36 s  (1.31 s – 1.40 s) | 430 KB  | 579 KB    | 0 B      |
+| 5571       | 4      | 1.62 s  (1.60 s – 1.78 s) | 1.3 MB  | 1.5 MB    | 110.5 MB |
+
+### `aggregate` (hot path)
+
+| n_polygons | batch                | slices | factor     | median  (p10 – p90)       | ΔRSS     |
+| ---------- | -------------------- | ------ | ---------- | ------------------------- | -------- |
+| 50         | (member=50,)         | 50     | 1          | 5.3 ms  (4.7 ms – 5.5 ms) | 0 B      |
+| 507        | (member=50,)         | 50     | 1          | 5.0 ms  (4.8 ms – 5.2 ms) | 0 B      |
+| 5571       | (member=50,)         | 50     | 1          | 11 ms  (9.8 ms – 13 ms)   | 0 B      |
+| 5571       | (member=50, step=10) | 500    | 1          | 108 ms  (102 ms – 112 ms) | 41.2 MB  |
+| 5571       | (member=50, step=40) | 2 000  | 1          | 522 ms  (502 ms – 680 ms) | 426.8 MB |
+| 5571       | (member=50,)         | 50     | 4          | 11 ms  (11 ms – 14 ms)    | 0 B      |
+| 5571       | (member=50,)         | 50     | 1 (1% NaN) | 16 ms  (15 ms – 18 ms)    | 0 B      |
+
+### `compute_bias` (DAG rollup)
+
+| n_leaves | depth | hierarchy                   | batch                | median  (p10 – p90)       | ΔRSS |
+| -------- | ----- | --------------------------- | -------------------- | ------------------------- | ---- |
+| 507      | 2     | medium GADM (state -> muni) | (member=50,)         | 3.8 ms  (2.4 ms – 4.6 ms) | 0 B  |
+| 5571     | 2     | full GADM (state -> muni)   | (member=50,)         | 15 ms  (13 ms – 19 ms)    | 0 B  |
+| 5571     | 2     | full GADM (state -> muni)   | (member=50, step=10) | 19 ms  (18 ms – 20 ms)    | 0 B  |
+| 5571     | 4     | synthetic deep              | (member=50,)         | 8.9 ms  (8.6 ms – 9.5 ms) | 0 B  |
+
+<!-- BENCHMARK END -->
+
+Numbers are point-in-time on the author's machine and may vary ±20% by
+hardware. Cold-import overhead (~0.3 s for `import geohalo`) is excluded —
+the suite measures steady-state cost. Re-generate after any perf-relevant
+change.
+
 ## Why exact fractional coverage
 
 The three common alternatives — *centroid / point-in-polygon*,
