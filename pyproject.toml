@@ -4,6 +4,32 @@ version = "0.1.0"
 description = "Exact-fractional-area zonal statistics over weather grids"
 readme = "README.md"
 requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Henrique Campiotti", email = "henrique.campiotti.marques@gmail.com" },
+]
+keywords = [
+    "zonal-statistics",
+    "weather",
+    "geospatial",
+    "xarray",
+    "polygon",
+    "grid",
+    "exactextract",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Typing :: Typed",
+]
 dependencies = [
     "exactextract>=0.3.0",
     "pandas>=3.0.3",
@@ -11,6 +37,15 @@ dependencies = [
     "shapely>=2.1.2",
     "xarray>=2026.4.0",
 ]
+
+[project.optional-dependencies]
+redis = ["redis>=7.4.0"]
+matplotlib = ["matplotlib>=3.10.9"]
+
+[project.urls]
+Homepage = "https://github.com/campiohe/geohalo"
+Repository = "https://github.com/campiohe/geohalo"
+Issues = "https://github.com/campiohe/geohalo/issues"
 
 [build-system]
 requires = ["uv_build>=0.11.16,<0.12.0"]
