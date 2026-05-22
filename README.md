@@ -61,6 +61,10 @@ forecast data. The library splits the work into two phases:
 uv add geohalo            # or: pip install geohalo
 ```
 
+Optional extras:
+
+- `redis` — for the `RedisWeightCache` backend
+
 ## Quickstart
 
 ```python
@@ -84,6 +88,23 @@ out = aggregate(da, weights)                 # hot path; ms-scale
 The output preserves every non-spatial dim of `da` (ensemble member,
 lead time, vertical level, …) and replaces `(latitude, longitude)` with
 a single `polygon` dim indexed by the polygon keys.
+
+### Caching
+
+`compute_weights` is the only expensive step. Wrap it in a cache so it
+runs once per `(grid, polygons, downscale_factor)`:
+
+```python
+from geohalo import LocalWeightCache       # or RedisWeightCache
+
+cache = LocalWeightCache("./.geohalo-cache")
+weights = cache.get_or_compute(polygons, grid)
+```
+
+Both caches share the same key schema — the cache key embeds the grid's
+SHA-256 digest, the polygon set's SHA-256 digest, and the downscale factor —
+so any change to the grid, the polygons, or the downscaling settings
+invalidates the cache implicitly.
 
 ## Why exact fractional coverage
 
@@ -158,6 +179,7 @@ the algorithm derivation and benchmarks.
 ## Non-goals
 
 - **No reprojection** — EPSG:4326 throughout (grids and polygons).
+- **No per-variable cache** — `W` depends on grid + polygons only.
 - **No WGS84-ellipsoidal cell areas** — spherical is within ~0.3 %.
 
 ## Development
