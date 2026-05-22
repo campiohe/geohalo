@@ -46,7 +46,8 @@ forecast data. The library splits the work into two phases:
    call [exactextract](https://github.com/isciences/exactextract) for
    exact fractional cell coverage, multiply by per-cell spherical area
    `R² · Δlon · (sin(lat_top) − sin(lat_bot))` to correct for latitude,
-   row-normalise into a `scipy.sparse.csr_matrix`.
+   row-normalise into a `scipy.sparse.csr_matrix`, and optionally cache
+   the result.
 
 2. **Aggregate** (`aggregate`, hot path):
    one sparse · dense matmul, broadcast over every non-spatial dim
@@ -272,5 +273,7 @@ failure (`on_nan_child="raise"`).
 
 ```bash
 uv sync                                          # install deps
+uv run pytest                                    # tests
+uv run ruff check .                              # lint
 uv run python examples/visualize.py              # end-to-end example
 ```
