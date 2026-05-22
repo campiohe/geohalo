@@ -176,6 +176,34 @@ cached `W`** at precompute time, so `aggregate()` has zero per-call
 downscaling cost. See [`docs/downscaling.md`](docs/downscaling.md) for
 the algorithm derivation and benchmarks.
 
+## Rolling up a hierarchy: `compute_bias`
+
+When leaf polygons (e.g. municipalities) belong to one or more parent
+groupings (states, basins, custom zones with weighted membership),
+`BiasHierarchy` precomposes the parent-child-weight DAG into a sparse
+matrix so rollups also collapse to a matmul:
+
+```python
+from geohalo import BiasHierarchy, compute_bias
+
+hierarchy = BiasHierarchy.build(
+    edges=[
+        (("BR", "SP"), ("BR", "SP", "muni_a"), 1.0),
+        (("BR", "SP"), ("BR", "SP", "muni_b"), 1.0),
+        (("BR", "RJ"), ("BR", "RJ", "muni_c"), 1.0),
+    ],
+    key_names=("country", "state", "muni"),
+)
+
+rolled = compute_bias(leaf_aggregates, hierarchy)
+```
+
+Each parent's value is the normalised weighted average of its
+transitively-contributing leaves. NaN handling is symmetric to
+`aggregate`: parents with no finite contributing leaf return `NaN`
+(`on_nan_child="ignore"`, the default), or you can opt into a hard
+failure (`on_nan_child="raise"`).
+
 ## Non-goals
 
 - **No reprojection** — EPSG:4326 throughout (grids and polygons).

@@ -1,4 +1,5 @@
 from geohalo.aggregate import aggregate
+from geohalo.bias import BiasHierarchy, compute_bias
 from geohalo.cache import LocalWeightCache, RedisWeightCache
 from geohalo.downscale import (
     build_downscale_operator,
@@ -11,6 +12,7 @@ from geohalo.grid import GridSpec
 from geohalo.weights import EmptyCoverageError, Weights, compute_weights
 
 __all__ = [
+    "BiasHierarchy",
     "EmptyCoverageError",
     "GridSpec",
     "LocalWeightCache",
@@ -19,6 +21,7 @@ __all__ = [
     "Weights",
     "aggregate",
     "build_downscale_operator",
+    "compute_bias",
     "compute_weights",
     "downscale_plane",
     "refine_grid",
