@@ -215,4 +215,5 @@ failure (`on_nan_child="raise"`).
 
 ```bash
 uv sync                                          # install deps
+uv run python examples/visualize.py              # end-to-end example
 ```
