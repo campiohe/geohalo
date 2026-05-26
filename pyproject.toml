@@ -1,6 +1,6 @@
 [project]
 name = "geohalo"
-version = "0.1.0"
+version = "0.1.1"
 description = "Exact-fractional-area zonal statistics over weather grids"
 readme = "README.md"
 requires-python = ">=3.12"
