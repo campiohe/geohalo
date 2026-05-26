@@ -481,6 +481,14 @@ dependencies = [
     { name = "xarray" },
 ]
 
+[package.optional-dependencies]
+matplotlib = [
+    { name = "matplotlib" },
+]
+redis = [
+    { name = "redis" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "cfgrib" },
@@ -496,11 +504,14 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "exactextract", specifier = ">=0.3.0" },
-    { name = "pandas", specifier = ">=3.0.3" },
-    { name = "scipy", specifier = ">=1.17.1" },
-    { name = "shapely", specifier = ">=2.1.2" },
-    { name = "xarray", specifier = ">=2026.4.0" },
+    { name = "matplotlib", marker = "extra == 'matplotlib'", specifier = ">=3.10.9" },
+    { name = "pandas", specifier = ">=2.2" },
+    { name = "redis", marker = "extra == 'redis'", specifier = ">=7.4.0" },
+    { name = "scipy", specifier = ">=1.11" },
+    { name = "shapely", specifier = ">=2.0" },
+    { name = "xarray", specifier = ">=2023.8" },
 ]
+provides-extras = ["redis", "matplotlib"]
 
 [package.metadata.requires-dev]
 dev = [
