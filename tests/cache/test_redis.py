@@ -1,66 +1,39 @@
-"""RedisWeightCache against a real Redis container."""
-
-from typing import TYPE_CHECKING
-from unittest import mock
-
+import geopandas as gpd
+import numpy as np
+import pandas as pd
 import pytest
+import shapely
 
-from geohalo import cache as cache_module
-from geohalo.cache import RedisWeightCache
-from geohalo.geometry import PolygonSet
-from geohalo.grid import GridSpec
-
-if TYPE_CHECKING:
-    import redis
+from geohalo.cache import RedisCache
 
 
 @pytest.mark.redis
-def test_first_call_writes_second_call_reads(
-    redis_client: "redis.Redis",
-    simple_grid: GridSpec,
-    simple_polygons: PolygonSet,
-) -> None:
-    cache = RedisWeightCache(client=redis_client)
-    with mock.patch(
-        "geohalo.cache.compute_weights",
-        wraps=cache_module.compute_weights,
-    ) as patched:
-        cache.get_or_compute(simple_polygons, simple_grid)
-        cache.get_or_compute(simple_polygons, simple_grid)
-    assert patched.call_count == 1
+def test_redis_stencil(redis_client) -> None:
+    cache = RedisCache(redis_client)
+    lats = np.array([0.0, 1.0])
+    lons = np.array([0.0, 1.0])
+    geoms = gpd.GeoSeries([shapely.box(-0.4, -0.4, 1.4, 1.4)], index=["box"])
+    s1 = cache.get_or_compute_stencil(lats, lons, geoms)
+    s2 = cache.get_or_compute_stencil(lats, lons, geoms)
+    np.testing.assert_array_equal(s1.occupancy_matrix.toarray(), s2.occupancy_matrix.toarray())
 
 
 @pytest.mark.redis
-def test_target_resolution_reattached_on_hit(
-    redis_client: "redis.Redis",
-    simple_grid: GridSpec,
-    simple_polygons: PolygonSet,
-) -> None:
-    cache = RedisWeightCache(client=redis_client)
-    w1 = cache.get_or_compute(
-        simple_polygons, simple_grid, target_resolution=0.5,
-    )
-    w2 = cache.get_or_compute(
-        simple_polygons, simple_grid, target_resolution=0.51,
-    )
-    assert w1.target_resolution == 0.5
-    assert w2.target_resolution == 0.51
-    assert w1.downscale_factor == w2.downscale_factor == 2
+def test_redis_resampler(redis_client) -> None:
+    cache = RedisCache(redis_client)
+    s_lat = np.array([0.0, 1.0, 2.0])
+    s_lon = np.array([0.0, 1.0, 2.0])
+    t_lat = np.linspace(0.0, 2.0, 5)
+    t_lon = np.linspace(0.0, 2.0, 5)
+    r1 = cache.get_or_compute_resampler(s_lat, s_lon, t_lat, t_lon)
+    r2 = cache.get_or_compute_resampler(s_lat, s_lon, t_lat, t_lon)
+    np.testing.assert_array_equal(r1.transform_matrix.toarray(), r2.transform_matrix.toarray())
 
 
 @pytest.mark.redis
-def test_force_recompute_bypasses_cache(
-    redis_client: "redis.Redis",
-    simple_grid: GridSpec,
-    simple_polygons: PolygonSet,
-) -> None:
-    cache = RedisWeightCache(client=redis_client)
-    with mock.patch(
-        "geohalo.cache.compute_weights",
-        wraps=cache_module.compute_weights,
-    ) as patched:
-        cache.get_or_compute(simple_polygons, simple_grid)
-        cache.get_or_compute(
-            simple_polygons, simple_grid, force_recompute=True,
-        )
-    assert patched.call_count == 2
+def test_redis_tree(redis_client) -> None:
+    cache = RedisCache(redis_client)
+    edges = pd.DataFrame({"parent": ["p", "p"]}, index=pd.Index(["a", "b"], name="child"))
+    t1 = cache.get_or_compute_tree(edges)
+    t2 = cache.get_or_compute_tree(edges)
+    np.testing.assert_array_equal(t1.rollup_matrix.toarray(), t2.rollup_matrix.toarray())
