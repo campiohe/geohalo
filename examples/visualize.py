@@ -25,12 +25,7 @@ By default, cached downloads live under ~/.cache/geohalo/. Run:
 """
 
 import argparse
-import datetime as dt
-import json
-import re
 import textwrap
-import urllib.error
-import urllib.request
 import warnings
 from pathlib import Path
 
@@ -38,14 +33,15 @@ import matplotlib as mpl
 
 mpl.use("Agg")
 
+import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import shapely
 import xarray as xr
 from matplotlib.figure import Figure
 
-from benchmarks._data import build_polygon_set, fetch_gadm_brazil_l2
-from geohalo import GridSpec, LocalWeightCache, PolygonSet, aggregate
+from benchmarks._data import brazil_municipalities, fetch_enfo_step_grib, latest_enfo_cycle
+from geohalo import LocalCache, reduce_with_stencil
 from geohalo.plot import (
     _draw_polygon,
     plot_aggregate_choropleth,
@@ -54,7 +50,6 @@ from geohalo.plot import (
     plot_grid,
 )
 
-ECMWF_BUCKET_URL = "https://ecmwf-forecasts.s3.amazonaws.com"
 ENFO_PARAMS = ("2t", "tp")
 ENFO_MEMBERS = (1, 2, 3, 4, 5)
 ENFO_STEP_HOURS = 6
@@ -73,90 +68,8 @@ _FULL_BBOX_CAPTION = (
 _ZOOM_SUBTITLE = (
     "Each panel is a 4x refinement of the same slice — "
     "native cell-mean, raw bilinear (not mean-preserving), "
-    "and 1 / 2 / 4 / 10 iterations of the linear mean-preserving kernel"
+    "and 1 / 2 / 3 / 4 iterations of the linear mean-preserving kernel"
 )
-
-
-def _latest_enfo_cycle(step_hours: int) -> tuple[str, str]:
-    """Walk back from now (UTC) to find the most recent enfo step file."""
-    now = dt.datetime.now(dt.UTC)
-    for back in range(7):
-        day = now - dt.timedelta(days=back)
-        for cycle_hour in (12, 0):
-            date_str = day.strftime("%Y%m%d")
-            cycle = f"{cycle_hour:02d}z"
-            ts = f"{date_str}{cycle_hour:02d}0000"
-            url = (
-                f"{ECMWF_BUCKET_URL}/{date_str}/{cycle}/ifs/0p25/enfo/"
-                f"{ts}-{step_hours}h-enfo-ef.index"
-            )
-            req = urllib.request.Request(url, method="HEAD")  # noqa: S310
-            try:
-                with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310
-                    if resp.status == 200:
-                        return date_str, cycle
-            except urllib.error.HTTPError:
-                continue
-    raise RuntimeError("no ECMWF enfo cycle found in last 7 days")
-
-
-def _fetch_enfo_slice(  # noqa: PLR0913
-    date_str: str,
-    cycle: str,
-    step_hours: int,
-    params: tuple[str, ...],
-    members: tuple[int, ...],
-    cache_dir: Path,
-) -> Path:
-    """Range-read the requested messages from the enfo grib2 and concatenate.
-
-    GRIB2 messages are self-delimiting, so concatenating raw bytes for a
-    set of messages produces a valid GRIB file that cfgrib can open.
-    """
-    ts = f"{date_str}{cycle[:2]}0000"
-    base = f"{ECMWF_BUCKET_URL}/{date_str}/{cycle}/ifs/0p25/enfo/{ts}-{step_hours}h-enfo-ef"
-    member_tag = f"m{members[0]}-{members[-1]}"
-    cache_path = cache_dir / f"enfo_{date_str}_{cycle}_{step_hours}h_{'-'.join(params)}_{member_tag}.grib2"
-    if cache_path.exists():
-        return cache_path
-
-    print(f"fetching ECMWF enfo index for {date_str} {cycle} step {step_hours}h ...")  # noqa: T201
-    with urllib.request.urlopen(base + ".index", timeout=60) as resp:  # noqa: S310
-        idx_lines = resp.read().decode().splitlines()
-
-    member_strs = {str(m) for m in members}
-    param_set = set(params)
-    selected = [
-        e for e in (json.loads(line) for line in idx_lines)
-        if e["param"] in param_set and e.get("number") in member_strs
-    ]
-    if not selected:
-        raise RuntimeError(f"no messages match params={params} members={members}")
-    selected.sort(key=lambda e: e["_offset"])
-    total_bytes = sum(e["_length"] for e in selected)
-    print(  # noqa: T201
-        f"  range-reading {len(selected)} messages "
-        f"({total_bytes / 1e6:.1f} MB) into {cache_path.name}",
-    )
-
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    tmp = cache_path.with_suffix(cache_path.suffix + ".tmp")
-    try:
-        with tmp.open("wb") as out:
-            for entry in selected:
-                start = entry["_offset"]
-                end = start + entry["_length"] - 1
-                req = urllib.request.Request(  # noqa: S310
-                    base + ".grib2",
-                    headers={"Range": f"bytes={start}-{end}"},
-                )
-                with urllib.request.urlopen(req, timeout=120) as resp:  # noqa: S310
-                    out.write(resp.read())
-        tmp.replace(cache_path)
-    finally:
-        if tmp.exists():
-            tmp.unlink()
-    return cache_path
 
 
 def _crop_da_to_bbox(
@@ -180,9 +93,9 @@ def _crop_da_to_bbox(
     )
 
 
-def _smallest_polygon_key(polygons: PolygonSet) -> tuple:
-    smallest_idx = min(range(len(polygons.geoms)), key=lambda i: polygons.geoms[i].area)
-    return polygons.keys[smallest_idx]
+def _smallest_polygon_key(geoms: gpd.GeoSeries) -> tuple:
+    areas = geoms.area
+    return areas.index[int(np.argmin(areas.to_numpy()))]
 
 
 def _select_first(da: xr.DataArray, *, candidates: tuple[str, ...]) -> xr.DataArray:
@@ -192,52 +105,22 @@ def _select_first(da: xr.DataArray, *, candidates: tuple[str, ...]) -> xr.DataAr
 
 
 def _crop_grid_and_da(
-    da_slice: xr.DataArray, grid: GridSpec, *, bounds: tuple[float, float, float, float],
-) -> tuple[xr.DataArray, GridSpec]:
-    """Crop a 2-D DataArray + GridSpec to a lat/lon bbox (xmin, ymin, xmax, ymax)."""
+    da_slice: xr.DataArray,
+    lats: np.ndarray,
+    lons: np.ndarray,
+    *,
+    bounds: tuple[float, float, float, float],
+) -> tuple[xr.DataArray, np.ndarray, np.ndarray]:
+    """Crop a 2-D DataArray + lat/lon arrays to a lat/lon bbox (xmin, ymin, xmax, ymax)."""
     xmin, ymin, xmax, ymax = bounds
-    lat_mask = (grid.lats >= ymin) & (grid.lats <= ymax)
-    lon_mask = (grid.lons >= xmin) & (grid.lons <= xmax)
+    lat_mask = (lats >= ymin) & (lats <= ymax)
+    lon_mask = (lons >= xmin) & (lons <= xmax)
     if not lat_mask.any() or not lon_mask.any():
         raise ValueError(f"bbox {bounds!r} does not intersect grid")
-    new_lats = np.asarray(grid.lats[lat_mask])
-    new_lons = np.asarray(grid.lons[lon_mask])
-    new_grid = GridSpec(lats=new_lats, lons=new_lons)
+    new_lats = np.asarray(lats[lat_mask])
+    new_lons = np.asarray(lons[lon_mask])
     new_da = da_slice.sel(latitude=new_lats, longitude=new_lons)
-    return new_da, new_grid
-
-
-_PT_CONNECTORS = ("dos", "das", "do", "de", "da")
-
-
-def _humanize_gadm_name(name: str) -> str:
-    """Split a camelCased GADM NAME field into words, handling Portuguese connectors.
-
-    "RioGrandedoNorte" → "Rio Grande do Norte"
-    "EspíritoSanto"    → "Espírito Santo"
-    "Bahia"            → "Bahia"
-
-    GADM strips spaces and glues lowercase Portuguese connectors onto the
-    preceding word ("Grandedo" instead of "Grande do"). We do the inverse.
-    """
-    if not name:
-        return ""
-    spaced = re.sub(r"(?<=[^A-Z\s])(?=[A-Z])", " ", name)
-    out: list[str] = []
-    for word in spaced.split():
-        lo = word.lower()
-        for connector in _PT_CONNECTORS:
-            if (
-                len(word) > len(connector) + 1
-                and lo.endswith(connector)
-                and word[-len(connector) - 1].islower()
-            ):
-                out.append(word[: -len(connector)])
-                out.append(connector)
-                break
-        else:
-            out.append(word)
-    return " ".join(out)
+    return new_da, new_lats, new_lons
 
 
 def _finalise_downscale_figure(
@@ -331,13 +214,12 @@ def main() -> None:  # noqa: PLR0915
     if args.date and args.cycle:
         date_str, cycle = args.date, args.cycle
     else:
-        date_str, cycle = _latest_enfo_cycle(ENFO_STEP_HOURS)
+        date_str, cycle = latest_enfo_cycle((ENFO_STEP_HOURS,))
         print(f"using latest available enfo cycle: {date_str} {cycle}")  # noqa: T201
 
-    grib_path = _fetch_enfo_slice(
+    grib_path = fetch_enfo_step_grib(
         date_str, cycle, ENFO_STEP_HOURS, ENFO_PARAMS, ENFO_MEMBERS, args.cache_dir,
     )
-    gadm = fetch_gadm_brazil_l2(args.cache_dir)
 
     # ---- build polygons + grid (t2m and tp share the 0.25° global grid) ----
     da_t2m_global = xr.open_dataset(
@@ -351,28 +233,31 @@ def main() -> None:  # noqa: PLR0915
 
     da_t2m = _crop_da_to_bbox(da_t2m_global, DEFAULT_BBOX)
     da_tp = _crop_da_to_bbox(da_tp_global, DEFAULT_BBOX)
-    grid = GridSpec.from_dataarray(da_t2m)
+    lats = da_t2m["latitude"].to_numpy()
+    lons = da_t2m["longitude"].to_numpy()
 
-    polygons, polygon_names = build_polygon_set(gadm, DEFAULT_BBOX)
-    print(f"grid: {grid.shape}, {len(polygons.keys)} polygons in bbox")  # noqa: T201
+    geoms_full = brazil_municipalities(args.cache_dir)
+    bbox_geom = shapely.box(*DEFAULT_BBOX)
+    geoms = geoms_full[geoms_full.intersects(bbox_geom)]
+    print(f"grid: ({lats.size}, {lons.size}), {len(geoms)} polygons in bbox")  # noqa: T201
 
-    cache = LocalWeightCache(args.cache_dir / "weights")
-    weights = cache.get_or_compute(polygons, grid)
+    cache = LocalCache(args.cache_dir / "weights")
+    stencil = cache.get_or_compute_stencil(lats, lons, geoms)
 
     # ---- grid overlay ----
     ax = plot_grid(
-        grid, polygons,
-        title=f"ECMWF ENS t2m grid ({grid.shape[0]}x{grid.shape[1]}) "
-              f"with {len(polygons.keys)} GADM polygons",
+        lats, lons, geoms,
+        title=f"ECMWF ENS t2m grid ({lats.size}x{lons.size}) "
+              f"with {len(geoms)} GADM polygons",
     )
     ax.figure.savefig(args.out_dir / "grid_overlay.png", dpi=120, bbox_inches="tight")
     plt.close(ax.figure)
     print(f"wrote {args.out_dir / 'grid_overlay.png'}")  # noqa: T201
 
     # ---- coverage heatmap for one polygon ----
-    polygon_key = _parse_polygon_key(args.polygon_key) or _smallest_polygon_key(polygons)
+    polygon_key = _parse_polygon_key(args.polygon_key) or _smallest_polygon_key(geoms)
     ax = plot_coverage(
-        grid, polygons, weights, polygon_key,
+        stencil, geoms, polygon_key,
         title=f"exact-fractional weights for polygon {polygon_key}",
     )
     safe_key = "_".join(str(p) for p in polygon_key).replace(".", "-")
@@ -383,9 +268,9 @@ def main() -> None:  # noqa: PLR0915
 
     # ---- t2m choropleth ----
     da_t2m_slice = _select_first(da_t2m, candidates=("number", "step", "time"))
-    out_t2m = aggregate(da_t2m_slice, weights)
+    out_t2m = reduce_with_stencil(da_t2m_slice, stencil)
     ax = plot_aggregate_choropleth(
-        out_t2m, polygons,
+        out_t2m, geoms,
         title="t2m aggregate per polygon (member 1, step 6h)",
     )
     ax.figure.savefig(args.out_dir / "aggregate_choropleth.png", dpi=120, bbox_inches="tight")
@@ -400,7 +285,7 @@ def main() -> None:  # noqa: PLR0915
     # Eastern Brazil is ~2:1 tall; use a taller+wider canvas so panels don't
     # stretch and inter-row spacing survives the natural aspect ratio. Do NOT
     # call subplots_adjust afterwards — it displaces the already-laid-out colorbar.
-    fig = plot_downscale_comparison(tp_slice_mm, grid, factor=4, figsize=(16, 11))
+    fig = plot_downscale_comparison(tp_slice_mm, lats, lons, factor=4, figsize=(16, 11))
     _finalise_downscale_figure(
         fig,
         title=(
@@ -417,30 +302,30 @@ def main() -> None:  # noqa: PLR0915
     if args.downscale_polygon_key is not None:
         ds_key = _parse_polygon_key(args.downscale_polygon_key)
     else:
-        ds_key = _smallest_polygon_key(polygons)
-    ds_idx = polygons.keys.index(ds_key)
+        ds_key = _smallest_polygon_key(geoms)
+    _geom_lookup = dict(zip(geoms.index, geoms.to_numpy(), strict=True))
     zoom_targets: list[tuple[tuple, shapely.Geometry]] = [
-        (ds_key, polygons.geoms[ds_idx]),
+        (ds_key, _geom_lookup[ds_key]),
     ]
 
-    dlon = float(abs(grid.lons[1] - grid.lons[0]))
-    dlat = float(abs(grid.lats[1] - grid.lats[0]))
+    dlon = float(abs(lons[1] - lons[0]))
+    dlat = float(abs(lats[1] - lats[0]))
     pad_lon = args.downscale_padding_cells * dlon
     pad_lat = args.downscale_padding_cells * dlat
 
     for ds_key, ds_geom in zoom_targets:
         minx, miny, maxx, maxy = ds_geom.bounds
         bounds = (minx - pad_lon, miny - pad_lat, maxx + pad_lon, maxy + pad_lat)
-        tp_cropped, grid_cropped = _crop_grid_and_da(tp_slice_mm, grid, bounds=bounds)
-        if min(grid_cropped.shape) < 2:
+        tp_cropped, crop_lats, crop_lons = _crop_grid_and_da(tp_slice_mm, lats, lons, bounds=bounds)
+        if min(crop_lats.size, crop_lons.size) < 2:
             print(  # noqa: T201
-                f"  skip zoom: cropped grid too small ({grid_cropped.shape}) "
+                f"  skip zoom: cropped grid too small ({crop_lats.size}x{crop_lons.size}) "
                 f"for polygon {ds_key}",
             )
             continue
         fig = plot_downscale_comparison(
-            tp_cropped, grid_cropped, factor=4, figsize=(14, 8),
-            native_label=f"native ({grid_cropped.shape[0]}x{grid_cropped.shape[1]} cells)",
+            tp_cropped, crop_lats, crop_lons, factor=4, figsize=(14, 8),
+            native_label=f"native ({crop_lats.size}x{crop_lons.size} cells)",
         )
         for ax in fig.axes:
             if ax.get_xlabel() == "longitude":
@@ -449,13 +334,7 @@ def main() -> None:  # noqa: PLR0915
                     facecolor="none", edgecolor="red", linewidth=1.5, zorder=3,
                 )
 
-        name_1, name_2 = polygon_names.get(ds_key, ("", ""))
-        nice_state = _humanize_gadm_name(name_1)
-        nice_muni = _humanize_gadm_name(name_2)
-        location = (
-            f"{nice_muni}, {nice_state}" if nice_muni and nice_state
-            else " / ".join(str(p) for p in ds_key)
-        )
+        location = " / ".join(str(p) for p in ds_key)
         title = f"Mean-preserving 4x downscaling near {location}"
         caption = (
             f"ECMWF ENS tp, {date_str} {cycle} +{ENFO_STEP_HOURS}h, member 1. "

@@ -37,23 +37,24 @@ aggregates = W @ flat_grid_values
 
 where `W ∈ ℝ^(N_polygons × N_cells)` is a sparse matrix whose entries are
 the **exact fractional area** of `cell ∩ polygon` weighted by each cell's
-true surface area on a sphere, then row-normalised so each polygon's
-weights sum to 1.
+true surface area on a sphere; the `how="mean"` hot path divides by each
+polygon's total overlap area.
 
-`W` depends only on the grid topology and the polygon set — not on the
-forecast data. The library splits the work into two phases:
+`W` (the `Stencil`) depends only on the grid topology and the polygon set —
+not on the forecast data. The library splits the work into two phases:
 
-1. **Precompute** (`compute_weights`, one-time per `(grid, polygons)` pair):
+1. **Precompute** (`Stencil.compute`, one-time per `(grid, polygons)` pair):
    call [exactextract](https://github.com/isciences/exactextract) for
    exact fractional cell coverage, multiply by per-cell spherical area
    `R² · Δlon · (sin(lat_top) − sin(lat_bot))` to correct for latitude,
-   row-normalise into a `scipy.sparse.csr_matrix`, and optionally cache
-   the result.
+   store as a `scipy.sparse.csr_matrix`, and optionally cache the result.
 
-2. **Aggregate** (`aggregate`, hot path):
+2. **Reduce** (`reduce_with_stencil`, hot path):
    one sparse · dense matmul, broadcast over every non-spatial dim
    (ensemble, lead time, level, …). NaN-aware: a second matmul against a
-   validity mask renormalises per slice without rebuilding `W`.
+   validity mask renormalises per slice without rebuilding `W`. When the
+   input grid differs from the stencil's, a cached `Resampler` matrix is
+   fused in (`occupancy @ transform`) so it stays a single matmul.
 
 ## Install
 
@@ -65,49 +66,95 @@ uv add geohalo            # or: pip install geohalo
 
 Optional extras:
 
-- `redis` — for the `RedisWeightCache` backend
+- `redis` — for the `RedisCache` backend
 - `matplotlib` — for the helpers in `geohalo.plot`
 
 ## Quickstart
 
 ```python
+import geopandas as gpd
 import xarray as xr
-from geohalo import GridSpec, PolygonSet, compute_weights, aggregate
+from geohalo import reduce
 
 da = xr.open_dataset("forecast.grib", engine="cfgrib")["t2m"]
-grid = GridSpec.from_dataarray(da)
 
-polygons = PolygonSet.build(
-    geoms=[poly_a, poly_b, poly_c],          # list of shapely geometries
-    keys=[("BR", "SP"), ("BR", "RJ"), ("BR", "MG")],
-    key_names=("country", "state"),
+geoms = gpd.GeoSeries(
+    [poly_a, poly_b, poly_c],                       # shapely geometries
+    index=[("BR", "SP"), ("BR", "RJ"), ("BR", "MG")],  # the index holds the keys
 )
 
-weights = compute_weights(polygons, grid)    # one-time
-out = aggregate(da, weights)                 # hot path; ms-scale
-# out: xr.DataArray over (..., polygon), polygon a MultiIndex on key_names
+out = reduce(da, geoms)                  # hot path; ms-scale
+out_fine = reduce(da, geoms, target_resolution=0.05)   # refine the grid first
+# out: xr.DataArray over (..., geom)
 ```
 
 The output preserves every non-spatial dim of `da` (ensemble member,
 lead time, vertical level, …) and replaces `(latitude, longitude)` with
-a single `polygon` dim indexed by the polygon keys.
+a single `geom` dim indexed by the GeoSeries keys.
+
+`reduce` also accepts an `xr.Dataset` (every spatial data var is reduced),
+`how={"mean", "sum"}`, a `weight_key` naming a per-cell weight variable, and
+`spherical_correction=False` to disable the latitude-area correction.
 
 ### Caching
 
-`compute_weights` is the only expensive step. Wrap it in a cache so it
-runs once per `(grid, polygons, downscale_factor)`:
+The expensive precompute is the `Stencil` (and, when resampling, the
+`Resampler`). Wrap them in a cache so they run once per `(grid, polygons)`:
 
 ```python
-from geohalo import LocalWeightCache       # or RedisWeightCache
+from geohalo import LocalCache, reduce_with_stencil   # or RedisCache
 
-cache = LocalWeightCache("./.geohalo-cache")
-weights = cache.get_or_compute(polygons, grid)
+cache = LocalCache("./.geohalo-cache")
+stencil = cache.get_or_compute_stencil(da.latitude.values, da.longitude.values, geoms)
+out = reduce_with_stencil(da, stencil)
 ```
 
-Both caches share the same key schema — the cache key embeds the grid's
-SHA-256 digest, the polygon set's SHA-256 digest, and the downscale factor —
-so any change to the grid, the polygons, or the downscaling settings
-invalidates the cache implicitly.
+Each cached object's key is a SHA-256 digest of its inputs (grid coords +
+spherical flag + polygons for a `Stencil`; source/target coords + iterations
+for a `Resampler`), so any change to those inputs invalidates the cache
+implicitly.
+
+#### Fused reduce operator
+
+When you reduce over a *resampled* grid, the resample (`Resampler` matrix `T`)
+and the aggregation (stencil occupancy `W`) compose into one operator `M = W·T`
+that acts directly on the source grid. `geohalo` builds `M` without ever
+materialising `T` or the fine field — `W` has only `n_polygons` rows, so the
+fusion stays thin. `ReduceOperator` is that fused operator, and it's by far the
+most compact thing to cache (it does not grow with target resolution or
+iteration count):
+
+```python
+from geohalo import reduce_with_operator   # plus get_or_compute_reduce_operator on the cache
+
+op = cache.get_or_compute_reduce_operator(
+    stencil, da.latitude.values, da.longitude.values, iterations=3,
+)
+out = reduce_with_operator(da, op)         # (..., geom); also accepts how="sum"
+```
+
+For a 0.25° → 0.05° refine (~3.2M target cells) over 500 polygons, the
+materialised resampler is a 358 MB cache blob and **cannot build at all** at
+`iterations=3`; the fused `ReduceOperator` is a **0.40 MB** blob, builds in
+~0.5 s, and loads in ~0.5 ms. The clean fast path of `reduce` /
+`reduce_with_stencil` uses the same fusion internally; cache the operator when
+you apply it repeatedly (many members, lead times, runs). See
+[`docs/reduce-operator.md`](docs/reduce-operator.md).
+
+## Resampling grids
+
+Resampling is a first-class, reusable operation. `resample_grid` builds a
+value-independent sparse `Resampler` matrix (cacheable via
+`LocalCache.get_or_compute_resampler`) and applies it:
+
+```python
+from geohalo import resample_grid
+
+fine = resample_grid(da, target_resolution=0.05, iterations=3)
+```
+
+It works in either direction (refine or coarsen); mean-preservation is exact
+wherever geometrically possible. See [`docs/downscaling.md`](docs/downscaling.md).
 
 ## Performance
 
@@ -119,45 +166,76 @@ operations against the GADM Brazil L2 polygons (~5570 munis) on a synthetic
 
 <!-- BENCHMARK START -->
 
-Environment: Python 3.14.4 on Linux x86_64, geohalo @ 90c432b, scipy 1.17.1, numpy 2.4.6, shapely 2.1.2, xarray 2026.4.0, exactextract 0.3.0.
+Environment: Python 3.14.4 on Linux x86_64, geohalo @ f13ac45, scipy 1.17.1, numpy 2.4.6, shapely 2.1.2, xarray 2026.4.0, exactextract 0.3.0, geopandas 1.1.3.
 Grid: 0.25° over Brazil bbox (-74, -34, -34, 6) — 160×160 = 25,600 cells.
 Polygons: GADM Brazil L2 (~5570 total).
 Timing: 2 warmup + 7 iterations per row, reporting median (p10 – p90).
-Memory: `CSR mem` is the in-RAM size of the sparse weight matrix; `blob size` is the serialized cache payload (what `LocalWeightCache`/`RedisWeightCache` writes); `ΔRSS` is the process-RSS high-water-mark delta observed during that row.
+Memory: `CSR mem` is the in-RAM size of the sparse matrix; `blob size` is the serialized cache payload (what `LocalCache`/`RedisCache` writes); `ΔRSS` is the process-RSS high-water-mark delta observed during that row.
 
-Batch shapes follow ECMWF forecast conventions: `member=50` is a 50-perturbed-member ensemble (one slice per member), and `step` is forecast lead time (e.g., `step=40` is 40 lead times — a 10-day forecast sampled at 6 h). A `(member=50, step=10)` DataArray therefore contains 500 forecast slices stacked along two batch dims; `aggregate` flattens them, runs one sparse · dense matmul, and reshapes the result.
+Batch shapes follow ECMWF forecast conventions: `member=50` is a 50-perturbed-member ensemble (one slice per member), and `step` is forecast lead time (e.g., `step=40` is 40 lead times — a 10-day forecast sampled at 6 h). A `(member=50, step=10)` DataArray therefore contains 500 forecast slices stacked along two batch dims; `reduce_with_stencil` flattens them, runs one sparse · dense matmul, and reshapes the result.
 
-### `compute_weights` (one-time per (grid, polygons))
+### `Stencil.compute` (one-time per (grid, polygons))
 
 | n_polygons | factor | median  (p10 – p90)       | CSR mem | blob size | ΔRSS     |
 | ---------- | ------ | ------------------------- | ------- | --------- | -------- |
-| 50         | 1      | 9.1 ms  (8.7 ms – 9.7 ms) | 4 KB    | 6 KB      | 4.0 MB   |
-| 50         | 4      | 170 ms  (165 ms – 180 ms) | 12 KB   | 14 KB     | 185.7 MB |
-| 507        | 1      | 119 ms  (115 ms – 122 ms) | 39 KB   | 53 KB     | 0 B      |
-| 507        | 4      | 297 ms  (287 ms – 344 ms) | 122 KB  | 136 KB    | 14.6 MB  |
-| 5571       | 1      | 1.36 s  (1.31 s – 1.40 s) | 430 KB  | 579 KB    | 0 B      |
-| 5571       | 4      | 1.62 s  (1.60 s – 1.78 s) | 1.3 MB  | 1.5 MB    | 110.5 MB |
+| 50         | 1      | 21 ms  (19 ms – 28 ms)    | 6 KB    | 11 KB     | 6.2 MB   |
+| 50         | 4      | 23 ms  (22 ms – 34 ms)    | 56 KB   | 67 KB     | 6.0 MB   |
+| 507        | 1      | 170 ms  (161 ms – 181 ms) | 38 KB   | 55 KB     | 11.2 MB  |
+| 507        | 4      | 187 ms  (182 ms – 196 ms) | 275 KB  | 299 KB    | 4.4 MB   |
+| 5571       | 1      | 2.06 s  (1.96 s – 2.18 s) | 430 KB  | 581 KB    | 138.9 MB |
+| 5571       | 4      | 2.27 s  (2.20 s – 2.42 s) | 3.1 MB  | 3.2 MB    | 24.4 MB  |
 
-### `aggregate` (hot path)
+### `Resampler.compute` (one-time per (source grid, target grid))
 
-| n_polygons | batch                | slices | factor     | median  (p10 – p90)       | ΔRSS     |
-| ---------- | -------------------- | ------ | ---------- | ------------------------- | -------- |
-| 50         | (member=50,)         | 50     | 1          | 5.3 ms  (4.7 ms – 5.5 ms) | 0 B      |
-| 507        | (member=50,)         | 50     | 1          | 5.0 ms  (4.8 ms – 5.2 ms) | 0 B      |
-| 5571       | (member=50,)         | 50     | 1          | 11 ms  (9.8 ms – 13 ms)   | 0 B      |
-| 5571       | (member=50, step=10) | 500    | 1          | 108 ms  (102 ms – 112 ms) | 41.2 MB  |
-| 5571       | (member=50, step=40) | 2 000  | 1          | 522 ms  (502 ms – 680 ms) | 426.8 MB |
-| 5571       | (member=50,)         | 50     | 4          | 11 ms  (11 ms – 14 ms)    | 0 B      |
-| 5571       | (member=50,)         | 50     | 1 (1% NaN) | 16 ms  (15 ms – 18 ms)    | 0 B      |
+`factor=4` here means refining the 160×160 grid to 637×637. The power series
+`Σⱼ Gʲ·B` (`G = I − B·A`) is accumulated by applying `G` to `B` on the right, so
+every intermediate stays `(n_target, n_source)` — the dense `(n_target,
+n_target)` operator is never materialised. Higher iteration counts still cost
+more (the transform fills in as its reach grows), but the build stays
+sub-second and the default `resample_iterations=1` is cheapest:
 
-### `compute_bias` (DAG rollup)
+| grid               | iterations | median  (p10 – p90)       | CSR mem  | ΔRSS     |
+| ------------------ | ---------- | ------------------------- | -------- | -------- |
+| 160x160 -> 637x637 | 1          | 95 ms  (93 ms – 130 ms)   | 43.1 MB  | 56.8 MB  |
+| 160x160 -> 637x637 | 3          | 1.24 s  (939 ms – 1.28 s) | 224.0 MB | 770.7 MB |
+
+### `reduce_with_stencil` (hot path)
+
+| n_polygons | batch                | slices | factor     | median  (p10 – p90)       | ΔRSS    |
+| ---------- | -------------------- | ------ | ---------- | ------------------------- | ------- |
+| 50         | (member=50,)         | 50     | 1          | 3.6 ms  (3.2 ms – 6.2 ms) | 0 B     |
+| 507        | (member=50,)         | 50     | 1          | 3.7 ms  (3.4 ms – 4.1 ms) | 0 B     |
+| 5571       | (member=50,)         | 50     | 1          | 5.8 ms  (4.9 ms – 7.5 ms) | 0 B     |
+| 5571       | (member=50, step=10) | 500    | 1          | 196 ms  (189 ms – 209 ms) | 0 B     |
+| 5571       | (member=50, step=40) | 2 000  | 1          | 670 ms  (625 ms – 942 ms) | 30.6 MB |
+| 5571       | (member=50,)         | 50     | 4          | 113 ms  (111 ms – 118 ms) | 0 B     |
+| 5571       | (member=50,)         | 50     | 1 (1% NaN) | 14 ms  (14 ms – 15 ms)    | 0 B     |
+
+### `reduce_with_stencil` on `xr.Dataset` (hot path)
+
+| n_polygons | batch                | n_vars | slices | median  (p10 – p90)       | ΔRSS |
+| ---------- | -------------------- | ------ | ------ | ------------------------- | ---- |
+| 5571       | (member=50,)         | 3      | 50     | 16 ms  (14 ms – 21 ms)    | 0 B  |
+| 5571       | (member=50, step=10) | 3      | 500    | 512 ms  (487 ms – 534 ms) | 0 B  |
+
+### `resample_grid_with_matrix` (hot path)
+
+Applying a prebuilt `Resampler` matrix to data — the per-call cost of
+resampling (distinct from the one-time `Resampler.compute` above):
+
+| grid               | batch        | slices | median  (p10 – p90)       | ΔRSS |
+| ------------------ | ------------ | ------ | ------------------------- | ---- |
+| 160x160 -> 319x319 | (member=50,) | 50     | 45 ms  (41 ms – 56 ms)    | 0 B  |
+| 160x160 -> 637x637 | (member=50,) | 50     | 139 ms  (136 ms – 155 ms) | 0 B  |
+
+### `aggregate_bias_with_tree` (tree rollup)
 
 | n_leaves | depth | hierarchy                   | batch                | median  (p10 – p90)       | ΔRSS |
 | -------- | ----- | --------------------------- | -------------------- | ------------------------- | ---- |
-| 507      | 2     | medium GADM (state -> muni) | (member=50,)         | 3.8 ms  (2.4 ms – 4.6 ms) | 0 B  |
-| 5571     | 2     | full GADM (state -> muni)   | (member=50,)         | 15 ms  (13 ms – 19 ms)    | 0 B  |
-| 5571     | 2     | full GADM (state -> muni)   | (member=50, step=10) | 19 ms  (18 ms – 20 ms)    | 0 B  |
-| 5571     | 4     | synthetic deep              | (member=50,)         | 8.9 ms  (8.6 ms – 9.5 ms) | 0 B  |
+| 507      | 2     | medium GADM (muni -> state) | (member=50,)         | 1.1 ms  (0.9 ms – 1.2 ms) | 0 B  |
+| 5571     | 2     | full GADM (muni -> state)   | (member=50,)         | 5.6 ms  (5.0 ms – 6.8 ms) | 0 B  |
+| 5571     | 2     | full GADM (muni -> state)   | (member=50, step=10) | 19 ms  (17 ms – 23 ms)    | 0 B  |
+| 5571     | 4     | synthetic deep              | (member=50,)         | 2.8 ms  (2.7 ms – 4.4 ms) | 0 B  |
 
 <!-- BENCHMARK END -->
 
@@ -227,48 +305,51 @@ published cell-mean contract** (the average of the `factor²` children
 of any parent cell equals the parent's original value exactly).
 
 ```python
-weights = compute_weights(polygons, grid, target_resolution=0.05)
+out = reduce(da, geoms, target_resolution=0.05)
 ```
 
-The downscale operator `M = B + P − P·A·B` (bilinear upsample plus
-mean-correction) is built as a sparse matrix and **baked into the
-cached `W`** at precompute time, so `aggregate()` has zero per-call
-downscaling cost. See [`docs/downscaling.md`](docs/downscaling.md) for
-the algorithm derivation and benchmarks.
+`reduce` builds a `Stencil` on the refined target grid and a `Resampler`
+that maps the source grid onto it; the hot path fuses `occupancy @ transform`
+into a single matmul. The resample matrix is the N-iteration generalization
+of the classic `M = B + P − P·A·B` operator and preserves each source cell's
+mean exactly. See [`docs/downscaling.md`](docs/downscaling.md).
 
-## Rolling up a hierarchy: `compute_bias`
+## Rolling up a hierarchy: `aggregate_bias`
 
-When leaf polygons (e.g. municipalities) belong to one or more parent
-groupings (states, basins, custom zones with weighted membership),
-`BiasHierarchy` precomposes the parent-child-weight DAG into a sparse
-matrix so rollups also collapse to a matmul:
+When leaf polygons (e.g. municipalities) belong to a parent grouping
+(states, basins, custom zones), `aggregate_bias` precomposes the
+parent-child tree into a sparse matrix so rollups also collapse to a matmul:
 
 ```python
-from geohalo import BiasHierarchy, compute_bias
+import pandas as pd
+from geohalo import aggregate_bias
 
-hierarchy = BiasHierarchy.build(
-    edges=[
-        (("BR", "SP"), ("BR", "SP", "muni_a"), 1.0),
-        (("BR", "SP"), ("BR", "SP", "muni_b"), 1.0),
-        (("BR", "RJ"), ("BR", "RJ", "muni_c"), 1.0),
-    ],
-    key_names=("country", "state", "muni"),
+edges = pd.DataFrame(
+    {"parent": [("BR", "SP"), ("BR", "SP"), ("BR", "RJ")]},
+    index=pd.Index(
+        [("BR", "SP", "muni_a"), ("BR", "SP", "muni_b"), ("BR", "RJ", "muni_c")],
+        name="child",
+    ),
 )
 
-rolled = compute_bias(leaf_aggregates, hierarchy)
+rolled = aggregate_bias(leaf_aggregates, edges)
 ```
 
-Each parent's value is the normalised weighted average of its
-transitively-contributing leaves. NaN handling is symmetric to
-`aggregate`: parents with no finite contributing leaf return `NaN`
-(`on_nan_child="ignore"`, the default), or you can opt into a hard
-failure (`on_nan_child="raise"`).
+The DataFrame index is the child; the `parent` column is its parent. Each
+child has at most one parent — `geohalo` enforces this (tree, not DAG). Pass
+`how="sum"` for weighted sums, or a `weight_col` for non-uniform edge weights.
+Each parent's value is the normalised weighted average (or sum) of its
+transitively-contributing leaves; NaN leaves are dropped and the remaining
+weights renormalised.
 
 ## Non-goals
 
 - **No reprojection** — EPSG:4326 throughout (grids and polygons).
-- **No per-variable cache** — `W` depends on grid + polygons only.
-- **No WGS84-ellipsoidal cell areas** — spherical is within ~0.3 %.
+- **No per-variable cache** — the `Stencil` depends on grid + polygons only.
+- **No WGS84-ellipsoidal cell areas** — spherical is within ~0.3 %
+  (`spherical_correction=False` gives planar/equal-area weights).
+- **No DAG hierarchies** — each child has exactly one parent (tree only).
+- **No `how={"min", "max"}`** — `mean` and `sum` only.
 
 ## Development
 
