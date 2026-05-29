@@ -60,6 +60,9 @@ ignore = [
     "ICN003"
 ]
 
+[lint.pylint]
+max-args = 10
+
 [lint.flake8-pytest-style]
 raises-require-match-for = ["BaseException", "Exception"]
 
