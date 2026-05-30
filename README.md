@@ -5,26 +5,28 @@
 <h1 align="center">geohalo</h1>
 
 <p align="center">
-  <em>Exact-fractional-area zonal statistics over weather grids.</em>
+  <em>Exact-fractional-area zonal statistics over regular lat/lon grids.</em>
 </p>
 
 <p align="center">
   <a href="https://pypi.org/project/geohalo/"><img src="https://img.shields.io/pypi/v/geohalo.svg?color=3775a9&logo=pypi&logoColor=white" alt="PyPI"/></a>
   <a href="https://pypi.org/project/geohalo/"><img src="https://img.shields.io/pypi/pyversions/geohalo.svg?color=3776ab&logo=python&logoColor=white" alt="Python versions"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/pypi/l/geohalo.svg?color=blue" alt="License: MIT"/></a>
+  <a href="https://campiohe.github.io/geohalo/"><img src="https://img.shields.io/badge/docs-geohalo-f59e0b?logo=materialformkdocs&logoColor=white" alt="Documentation"/></a>
   <a href="https://github.com/campiohe/geohalo/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/campiohe/geohalo/release.yml?label=release&logo=github" alt="Release workflow"/></a>
   <a href="https://github.com/astral-sh/uv"><img src="https://img.shields.io/badge/managed%20by-uv-de5fe9.svg?logo=astral&logoColor=white" alt="Managed by uv"/></a>
 </p>
 
 ---
 
-Given a regular lat/lon mesh of weather values (loaded with `xarray`
-from GRIB, NetCDF, Zarr, …) and an arbitrary set of polygons,
+Given a regular lat/lon mesh of gridded values — temperature, precipitation,
+population density, a land-cover fraction, a satellite band, … (loaded with
+`xarray` from GRIB, NetCDF, Zarr, …) — and an arbitrary set of polygons,
 `geohalo` reduces the spatial dimensions of the mesh to one value per
 polygon with **sub-cell precision** and **millisecond-scale aggregation**
 in the hot path.
 
-The expensive geometric work happens once; every subsequent forecast
+The expensive geometric work happens once; every subsequent grid
 collapses to a single sparse · dense matmul.
 
 ## How it works
@@ -41,7 +43,7 @@ true surface area on a sphere; the `how="mean"` hot path divides by each
 polygon's total overlap area.
 
 `W` (the `Stencil`) depends only on the grid topology and the polygon set —
-not on the forecast data. The library splits the work into two phases:
+not on the grid values. The library splits the work into two phases:
 
 1. **Precompute** (`Stencil.compute`, one-time per `(grid, polygons)` pair):
    call [exactextract](https://github.com/isciences/exactextract) for
@@ -51,7 +53,7 @@ not on the forecast data. The library splits the work into two phases:
 
 2. **Reduce** (`reduce_with_stencil`, hot path):
    one sparse · dense matmul, broadcast over every non-spatial dim
-   (ensemble, lead time, level, …). NaN-aware: a second matmul against a
+   (time, ensemble member, band, level, …). NaN-aware: a second matmul against a
    validity mask renormalises per slice without rebuilding `W`. When the
    input grid differs from the stencil's, a cached `Resampler` matrix is
    fused in (`occupancy @ transform`) so it stays a single matmul.
@@ -72,24 +74,35 @@ Optional extras:
 ## Quickstart
 
 ```python
+import numpy as np
 import geopandas as gpd
 import xarray as xr
-from geohalo import reduce
+from shapely.geometry import box
+import geohalo as ghl
 
-da = xr.open_dataset("forecast.grib", engine="cfgrib")["t2m"]
+# any regular lat/lon DataArray works; a synthetic field so this runs as-is
+lats = np.arange(-25.0, -19.0, 0.25)
+lons = np.arange(-50.0, -42.0, 0.25)
+lon2d, lat2d = np.meshgrid(lons, lats)
+field = 290.0 + 5.0 * np.cos(np.deg2rad(4 * lat2d)) + 0.1 * lon2d
 
-geoms = gpd.GeoSeries(
-    [poly_a, poly_b, poly_c],                       # shapely geometries
-    index=[("BR", "SP"), ("BR", "RJ"), ("BR", "MG")],  # the index holds the keys
+da = xr.DataArray(
+    field, dims=("latitude", "longitude"),
+    coords={"latitude": lats, "longitude": lons}, name="value",
 )
 
-out = reduce(da, geoms)                  # hot path; ms-scale
-out_fine = reduce(da, geoms, target_resolution=0.05)   # refine the grid first
+geoms = gpd.GeoSeries(
+    [box(-49, -24, -47, -22), box(-47, -24, -45, -22), box(-46, -22, -44, -20)],
+    index=["SP", "RJ", "MG"],            # the index holds the keys
+)
+
+out = ghl.reduce(da, geoms)                  # hot path; ms-scale
+out_fine = ghl.reduce(da, geoms, target_resolution=0.05)   # refine the grid first
 # out: xr.DataArray over (..., geom)
 ```
 
-The output preserves every non-spatial dim of `da` (ensemble member,
-lead time, vertical level, …) and replaces `(latitude, longitude)` with
+The output preserves every non-spatial dim of `da` (time, ensemble member,
+band, vertical level, …) and replaces `(latitude, longitude)` with
 a single `geom` dim indexed by the GeoSeries keys.
 
 `reduce` also accepts an `xr.Dataset` (every spatial data var is reduced),
@@ -102,11 +115,11 @@ The expensive precompute is the `Stencil` (and, when resampling, the
 `Resampler`). Wrap them in a cache so they run once per `(grid, polygons)`:
 
 ```python
-from geohalo import LocalCache, reduce_with_stencil   # or RedisCache
+import geohalo as ghl   # ghl.RedisCache is also available
 
-cache = LocalCache("./.geohalo-cache")
+cache = ghl.LocalCache("./.geohalo-cache")
 stencil = cache.get_or_compute_stencil(da.latitude.values, da.longitude.values, geoms)
-out = reduce_with_stencil(da, stencil)
+out = ghl.reduce_with_stencil(da, stencil)
 ```
 
 Each cached object's key is a SHA-256 digest of its inputs (grid coords +
@@ -125,12 +138,12 @@ most compact thing to cache (it does not grow with target resolution or
 iteration count):
 
 ```python
-from geohalo import reduce_with_operator   # plus get_or_compute_reduce_operator on the cache
+import geohalo as ghl   # plus get_or_compute_reduce_operator on the cache
 
 op = cache.get_or_compute_reduce_operator(
     stencil, da.latitude.values, da.longitude.values, iterations=3,
 )
-out = reduce_with_operator(da, op)         # (..., geom); also accepts how="sum"
+out = ghl.reduce_with_operator(da, op)     # (..., geom); also accepts how="sum"
 ```
 
 For a 0.25° → 0.05° refine (~3.2M target cells) over 500 polygons, the
@@ -138,8 +151,8 @@ materialised resampler is a 358 MB cache blob and **cannot build at all** at
 `iterations=3`; the fused `ReduceOperator` is a **0.40 MB** blob, builds in
 ~0.5 s, and loads in ~0.5 ms. The clean fast path of `reduce` /
 `reduce_with_stencil` uses the same fusion internally; cache the operator when
-you apply it repeatedly (many members, lead times, runs). See
-[`docs/reduce-operator.md`](docs/reduce-operator.md).
+you apply it repeatedly (many grid slices — time steps, members, bands — or
+runs). See [the reduce-operator guide](https://campiohe.github.io/geohalo/concepts/reduce-operator/).
 
 ## Resampling grids
 
@@ -148,13 +161,13 @@ value-independent sparse `Resampler` matrix (cacheable via
 `LocalCache.get_or_compute_resampler`) and applies it:
 
 ```python
-from geohalo import resample_grid
+import geohalo as ghl
 
-fine = resample_grid(da, target_resolution=0.05, iterations=3)
+fine = ghl.resample_grid(da, target_resolution=0.05, iterations=3)
 ```
 
 It works in either direction (refine or coarsen); mean-preservation is exact
-wherever geometrically possible. See [`docs/downscaling.md`](docs/downscaling.md).
+wherever geometrically possible. See [the downscaling guide](https://campiohe.github.io/geohalo/concepts/downscaling/).
 
 ## Performance
 
@@ -305,14 +318,14 @@ published cell-mean contract** (the average of the `factor²` children
 of any parent cell equals the parent's original value exactly).
 
 ```python
-out = reduce(da, geoms, target_resolution=0.05)
+out = ghl.reduce(da, geoms, target_resolution=0.05)
 ```
 
 `reduce` builds a `Stencil` on the refined target grid and a `Resampler`
 that maps the source grid onto it; the hot path fuses `occupancy @ transform`
 into a single matmul. The resample matrix is the N-iteration generalization
 of the classic `M = B + P − P·A·B` operator and preserves each source cell's
-mean exactly. See [`docs/downscaling.md`](docs/downscaling.md).
+mean exactly. See [the downscaling guide](https://campiohe.github.io/geohalo/concepts/downscaling/).
 
 ## Rolling up a hierarchy: `aggregate_bias`
 
@@ -322,17 +335,14 @@ parent-child tree into a sparse matrix so rollups also collapse to a matmul:
 
 ```python
 import pandas as pd
-from geohalo import aggregate_bias
+import geohalo as ghl
 
 edges = pd.DataFrame(
-    {"parent": [("BR", "SP"), ("BR", "SP"), ("BR", "RJ")]},
-    index=pd.Index(
-        [("BR", "SP", "muni_a"), ("BR", "SP", "muni_b"), ("BR", "RJ", "muni_c")],
-        name="child",
-    ),
+    {"parent": ["SP", "SP", "RJ"]},
+    index=pd.Index(["muni_a", "muni_b", "muni_c"], name="child"),
 )
 
-rolled = aggregate_bias(leaf_aggregates, edges)
+rolled = ghl.aggregate_bias(leaf_aggregates, edges)
 ```
 
 The DataFrame index is the child; the `parent` column is its parent. Each
@@ -357,5 +367,9 @@ weights renormalised.
 uv sync                                          # install deps
 uv run pytest                                    # tests
 uv run ruff check .                              # lint
-uv run python examples/visualize.py              # end-to-end example
+uv run --group docs mkdocs serve                 # preview the docs locally
+uv run --group docs python docs/gen_figures.py   # regenerate the doc figures
 ```
+
+Docs are built with [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/)
+and deployed to <https://campiohe.github.io/geohalo/> on every push to `main`.
