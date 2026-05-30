@@ -1,0 +1,104 @@
+site_name: geohalo
+site_description: Exact-fractional-area zonal statistics over regular lat/lon grids.
+site_url: https://campiohe.github.io/geohalo/
+repo_url: https://github.com/campiohe/geohalo
+repo_name: campiohe/geohalo
+docs_dir: docs
+copyright: MIT-licensed · built with exactextract, scipy, and xarray
+
+theme:
+  name: material
+  logo: figures/logo.svg
+  favicon: figures/logo.svg
+  font:
+    text: Inter
+    code: JetBrains Mono
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: geohalo-light
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.top
+    - navigation.indexes
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+    - search.suggest
+    - search.highlight
+
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - footnotes
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_root_heading: true
+            show_source: false
+            show_signature_annotations: true
+            separate_signature: true
+            docstring_style: google
+            members_order: source
+            heading_level: 3
+
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Concepts:
+      - Aggregation as a linear operator: concepts/linear-operator.md
+      - The stencil: concepts/stencil.md
+      - Why exact fractional coverage: concepts/exact-coverage.md
+      - Latitude correction: concepts/latitude-correction.md
+      - Mean-preserving downscaling: concepts/downscaling.md
+      - The fused reduce operator: concepts/reduce-operator.md
+      - NaN-aware & weighted reduction: concepts/masked.md
+      - Hierarchical rollups: concepts/bias-tree.md
+  - Guides:
+      - Caching the precompute: guides/caching.md
+      - Resampling grids: guides/resampling.md
+  - Performance:
+      - Overview: performance.md
+      - Full benchmark report: benchmark.md
+  - API reference: api.md

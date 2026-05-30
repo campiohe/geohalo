@@ -1,0 +1,140 @@
+/* geohalo — logo palette
+   navy #0b1220 · slate #1e293b · amber #f59e0b · amber-dark #b45309 · cream #fef3c7 */
+
+:root {
+  --gh-navy: #0b1220;
+  --gh-slate: #1e293b;
+  --gh-amber: #f59e0b;
+  --gh-amber-dark: #b45309;
+  --gh-cream: #fef3c7;
+}
+
+/* ---- light scheme: navy chrome, amber accents ---- */
+[data-md-color-scheme="geohalo-light"] {
+  --md-primary-fg-color: #0b1220;
+  --md-primary-fg-color--light: #1e293b;
+  --md-primary-fg-color--dark: #060a13;
+  --md-primary-bg-color: #f8fafc;
+  --md-primary-bg-color--light: #e2e8f0;
+
+  --md-accent-fg-color: #b45309;
+  --md-accent-fg-color--transparent: rgba(180, 83, 9, 0.1);
+
+  --md-typeset-a-color: #b45309;
+  --md-code-hl-string-color: #b45309;
+}
+
+/* ---- dark scheme: amber on near-black ---- */
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #0b1220;
+  --md-primary-fg-color--light: #1e293b;
+  --md-primary-fg-color--dark: #060a13;
+  --md-primary-bg-color: #f1f5f9;
+
+  --md-accent-fg-color: #f59e0b;
+  --md-accent-fg-color--transparent: rgba(245, 158, 11, 0.1);
+
+  --md-typeset-a-color: #fbbf24;
+  --md-default-bg-color: #0b1220;
+}
+
+/* The user asked for the tinygrad layout: no right-hand table of contents. */
+.md-sidebar--secondary {
+  display: none !important;
+}
+@media screen and (min-width: 76.25em) {
+  .md-content {
+    max-width: 48rem;
+    margin: 0 auto;
+  }
+}
+
+/* amber selection + active nav, echoing the logo cells */
+::selection {
+  background: var(--gh-cream);
+  color: var(--gh-navy);
+}
+.md-nav__link--active,
+.md-nav__item .md-nav__link--active {
+  color: var(--md-accent-fg-color);
+  font-weight: 600;
+}
+
+/* figures sit on white cards so the amber halo reads in light & dark */
+.md-typeset img {
+  border-radius: 8px;
+}
+.md-typeset figure img {
+  background: #ffffff;
+  padding: 6px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+}
+.md-typeset figcaption {
+  font-size: 0.8rem;
+  /* theme-aware: dark-grey on light, light-grey on dark — readable in both modes */
+  color: var(--md-default-fg-color--light);
+  max-width: 40rem;
+  margin: 0.3rem auto 0;
+}
+
+/* Mermaid diagrams: our amber/cream (and slate) highlighted nodes carry dark text.
+   Material's injected themeCSS repaints node labels with `.nodeLabel, .nodeLabel p`
+   (a light colour in dark mode), washing the text out on the pale fills. We force the
+   intended fill on the box and a dark colour on EVERY text element — including the
+   inner <p>, which Material styles directly (so styling only .nodeLabel isn't enough). */
+.md-typeset .mermaid g.node.hl > rect,
+.md-typeset .mermaid g.node.leaf > rect,
+.md-typeset .mermaid g.node.op > rect {
+  fill: var(--gh-cream) !important;
+  stroke: var(--gh-amber-dark) !important;
+}
+.md-typeset .mermaid g.node.big > rect,
+.md-typeset .mermaid g.node.internal > rect {
+  fill: #e2e8f0 !important;
+  stroke: #64748b !important;
+}
+.md-typeset .mermaid g.node.hl .nodeLabel,
+.md-typeset .mermaid g.node.hl .nodeLabel p,
+.md-typeset .mermaid g.node.hl span,
+.md-typeset .mermaid g.node.hl p,
+.md-typeset .mermaid g.node.hl text,
+.md-typeset .mermaid g.node.hl tspan,
+.md-typeset .mermaid g.node.leaf .nodeLabel,
+.md-typeset .mermaid g.node.leaf .nodeLabel p,
+.md-typeset .mermaid g.node.leaf span,
+.md-typeset .mermaid g.node.leaf p,
+.md-typeset .mermaid g.node.leaf text,
+.md-typeset .mermaid g.node.leaf tspan,
+.md-typeset .mermaid g.node.op .nodeLabel,
+.md-typeset .mermaid g.node.op .nodeLabel p,
+.md-typeset .mermaid g.node.op span,
+.md-typeset .mermaid g.node.op p,
+.md-typeset .mermaid g.node.op text,
+.md-typeset .mermaid g.node.op tspan,
+.md-typeset .mermaid g.node.big .nodeLabel,
+.md-typeset .mermaid g.node.big .nodeLabel p,
+.md-typeset .mermaid g.node.big span,
+.md-typeset .mermaid g.node.big p,
+.md-typeset .mermaid g.node.big text,
+.md-typeset .mermaid g.node.big tspan,
+.md-typeset .mermaid g.node.internal .nodeLabel,
+.md-typeset .mermaid g.node.internal .nodeLabel p,
+.md-typeset .mermaid g.node.internal span,
+.md-typeset .mermaid g.node.internal p,
+.md-typeset .mermaid g.node.internal text,
+.md-typeset .mermaid g.node.internal tspan {
+  color: var(--gh-navy) !important;
+  fill: var(--gh-navy) !important;
+}
+
+/* tidy KaTeX/MathJax block spacing */
+.md-typeset mjx-container {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* code blocks: amber left rule to tie into the palette */
+.md-typeset .highlight > pre > code,
+.md-typeset pre > code {
+  border-left: 3px solid var(--md-accent-fg-color);
+}

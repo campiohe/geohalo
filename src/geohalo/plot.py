@@ -1,18 +1,20 @@
+from collections.abc import Hashable
 from typing import TYPE_CHECKING
 
+import geopandas as gpd
 import numpy as np
 import shapely
 import xarray as xr
 from scipy import ndimage
 
-from geohalo.downscale import downscale_plane, refine_grid
-from geohalo.geometry import PolygonSet
-from geohalo.grid import GridSpec
-from geohalo.weights import Weights
+from geohalo.geometry import midpoint_edges
+from geohalo.resampler import Resampler
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
     from matplotlib.figure import Figure
+
+    from geohalo.stencil import Stencil
 
 try:
     import matplotlib.pyplot as plt
@@ -30,22 +32,31 @@ else:
 def _require_matplotlib() -> None:
     if _MPL_IMPORT_ERROR is not None:
         raise ImportError(
-            "geohalo.plot requires matplotlib. Install it with `pip install geohalo[viz]`.",
+            "geohalo.plot requires matplotlib. Install it with `pip install geohalo[matplotlib]`.",
         ) from _MPL_IMPORT_ERROR
 
 
-def _grid_extent(grid: GridSpec) -> tuple[float, float, float, float]:
-    dlon = float(grid.lons[1] - grid.lons[0]) if grid.lons.size > 1 else 1.0
-    dlat = float(grid.lats[1] - grid.lats[0]) if grid.lats.size > 1 else 1.0
+def _grid_extent(lats: np.ndarray, lons: np.ndarray) -> tuple[float, float, float, float]:
+    dlon = float(lons[1] - lons[0]) if lons.size > 1 else 1.0
+    dlat = float(lats[1] - lats[0]) if lats.size > 1 else 1.0
     return (
-        float(grid.lons[0] - dlon / 2),
-        float(grid.lons[-1] + dlon / 2),
-        float(grid.lats[0] - dlat / 2),
-        float(grid.lats[-1] + dlat / 2),
+        float(lons[0] - dlon / 2),
+        float(lons[-1] + dlon / 2),
+        float(lats[0] - dlat / 2),
+        float(lats[-1] + dlat / 2),
     )
 
 
-def _draw_polygon(ax: "Axes", geom: shapely.Geometry, **kwargs) -> None:
+def _subdivide(centres: np.ndarray, factor: int) -> np.ndarray:
+    if factor == 1:
+        return np.asarray(centres, dtype=np.float64)
+    centres = np.asarray(centres, dtype=np.float64)
+    step = float(centres[1] - centres[0]) if centres.size > 1 else 1.0
+    offsets = (np.arange(factor) - (factor - 1) / 2) * (step / factor)
+    return (centres[:, None] + offsets[None, :]).ravel()
+
+
+def _draw_polygon(ax: "Axes", geom: shapely.Geometry, **kwargs: object) -> None:
     if geom.is_empty:
         return
     if isinstance(geom, shapely.MultiPolygon):
@@ -62,35 +73,29 @@ def _draw_polygon(ax: "Axes", geom: shapely.Geometry, **kwargs) -> None:
 
 
 def plot_grid(
-    grid: GridSpec,
-    polygons: PolygonSet | None = None,
+    lats: np.ndarray,
+    lons: np.ndarray,
+    geoms: gpd.GeoSeries | None = None,
     *,
     ax: "Axes | None" = None,
-    polygon_subset: list[tuple] | None = None,
     title: str | None = None,
 ) -> "Axes":
-    """Native lat/lon mesh as a wireframe, with optional polygon outlines.
-
-    Useful first look at "which cells does each polygon touch."
-    """
+    """Native lat/lon mesh as a wireframe, with optional polygon outlines."""
     _require_matplotlib()
     if ax is None:
         _, ax = plt.subplots(figsize=(8, 6))
 
-    lon_edges = _edges(grid.lons)
-    lat_edges = _edges(grid.lats)
+    lon_edges = midpoint_edges(np.asarray(lons))
+    lat_edges = midpoint_edges(np.asarray(lats))
     segments = [[(x, lat_edges[0]), (x, lat_edges[-1])] for x in lon_edges]
     segments.extend([(lon_edges[0], y), (lon_edges[-1], y)] for y in lat_edges)
     ax.add_collection(LineCollection(segments, colors="lightgray", linewidths=0.5))
 
-    if polygons is not None:
-        keys_to_draw = set(polygon_subset) if polygon_subset is not None else None
-        for key, geom in zip(polygons.keys, polygons.geoms, strict=True):
-            if keys_to_draw is not None and key not in keys_to_draw:
-                continue
+    if geoms is not None:
+        for geom in geoms.to_numpy():
             _draw_polygon(ax, geom, facecolor="none", edgecolor="C0", linewidth=1.0)
 
-    xmin, xmax, ymin, ymax = _grid_extent(grid)
+    xmin, xmax, ymin, ymax = _grid_extent(np.asarray(lats), np.asarray(lons))
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(ymin, ymax)
     ax.set_aspect("equal")
@@ -102,10 +107,9 @@ def plot_grid(
 
 
 def plot_coverage(
-    grid: GridSpec,
-    polygons: PolygonSet,
-    weights: Weights,
-    polygon_key: tuple,
+    stencil: "Stencil",
+    geoms: gpd.GeoSeries,
+    key: Hashable,
     *,
     ax: "Axes | None" = None,
     cmap: str = "viridis",
@@ -113,58 +117,46 @@ def plot_coverage(
     zoom: bool = True,
     padding_cells: float = 2.0,
 ) -> "Axes":
-    """Heatmap of the row of `W` corresponding to one polygon.
-
-    Each cell is coloured by its final (area-corrected, row-normalised) weight.
-    Overlays the polygon outline (red) and a wireframe of nearby grid cells.
-    By default zooms to the polygon's bbox + `padding_cells` cells of context
-    so sub-cell polygons stay visible; pass `zoom=False` to show the full grid.
-    """
+    """Heatmap of one polygon's row of the stencil (row-normalised for display)."""
     _require_matplotlib()
     if ax is None:
         _, ax = plt.subplots(figsize=(8, 6))
 
+    keys = list(stencil.keys)
     try:
-        row_idx = weights.polygon_keys.index(polygon_key)
+        row_idx = keys.index(key)
     except ValueError as e:
-        raise KeyError(f"polygon key {polygon_key!r} not found in weights") from e
+        raise KeyError(f"polygon key {key!r} not found in stencil") from e
 
-    row = np.asarray(weights.matrix[row_idx].todense()).reshape(weights.native_shape)
+    lats, lons = stencil.lats, stencil.lons
+    row = np.asarray(stencil.occupancy_matrix[row_idx].todense()).reshape(lats.size, lons.size)
+    total = row.sum()
+    if total > 0:
+        row = row / total
     masked = np.ma.masked_where(row == 0, row)
 
-    full_xmin, full_xmax, full_ymin, full_ymax = _grid_extent(grid)
+    full_xmin, full_xmax, full_ymin, full_ymax = _grid_extent(lats, lons)
     im = ax.imshow(
-        masked,
-        origin="lower",
+        masked, origin="lower",
         extent=(full_xmin, full_xmax, full_ymin, full_ymax),
-        cmap=cmap,
-        aspect="equal",
+        cmap=cmap, aspect="equal",
     )
     plt.colorbar(im, ax=ax, label="weight (row-normalised)")
 
-    lon_edges = _edges(grid.lons)
-    lat_edges = _edges(grid.lats)
+    lon_edges = midpoint_edges(lons)
+    lat_edges = midpoint_edges(lats)
     segments = [[(x, lat_edges[0]), (x, lat_edges[-1])] for x in lon_edges]
     segments.extend([(lon_edges[0], y), (lon_edges[-1], y)] for y in lat_edges)
-    ax.add_collection(
-        LineCollection(segments, colors="lightgray", linewidths=0.4, zorder=1),
-    )
+    ax.add_collection(LineCollection(segments, colors="lightgray", linewidths=0.4, zorder=1))
 
-    poly_geom: shapely.Geometry | None = None
-    try:
-        poly_idx = polygons.keys.index(polygon_key)
-        poly_geom = polygons.geoms[poly_idx]
-        _draw_polygon(
-            ax, poly_geom,
-            facecolor="none", edgecolor="red", linewidth=1.5, zorder=3,
-        )
-    except ValueError:
-        pass
+    poly_geom = dict(zip(geoms.index, geoms.to_numpy(), strict=True)).get(key)
+    if poly_geom is not None:
+        _draw_polygon(ax, poly_geom, facecolor="none", edgecolor="red", linewidth=1.5, zorder=3)
 
     if zoom and poly_geom is not None and not poly_geom.is_empty:
         minx, miny, maxx, maxy = poly_geom.bounds
-        dlon = float(abs(grid.lons[1] - grid.lons[0])) if grid.lons.size > 1 else 1.0
-        dlat = float(abs(grid.lats[1] - grid.lats[0])) if grid.lats.size > 1 else 1.0
+        dlon = float(abs(lons[1] - lons[0])) if lons.size > 1 else 1.0
+        dlat = float(abs(lats[1] - lats[0])) if lats.size > 1 else 1.0
         ax.set_xlim(minx - padding_cells * dlon, maxx + padding_cells * dlon)
         ax.set_ylim(miny - padding_cells * dlat, maxy + padding_cells * dlat)
     else:
@@ -173,85 +165,77 @@ def plot_coverage(
 
     ax.set_xlabel("longitude")
     ax.set_ylabel("latitude")
-    ax.set_title(title or f"coverage for polygon {polygon_key}")
+    ax.set_title(title or f"coverage for polygon {key}")
     return ax
 
 
 def plot_downscale_comparison(
     da_slice: np.ndarray | xr.DataArray,
-    grid: GridSpec,
+    lats: np.ndarray,
+    lons: np.ndarray,
     *,
     factor: int,
-    iterations: tuple[int, int, int, int] = (1, 2, 4, 10),
+    iterations: tuple[int, int, int, int] = (1, 2, 3, 4),
     figsize: tuple[float, float] = (14, 8),
     cmap: str = "viridis",
     native_label: str = "native",
 ) -> "Figure":
-    """2x3 grid comparing native, raw bilinear, and four iteration counts of
-    the linear mean-preserving downscale kernel.
+    """2x3 comparison: native, raw bilinear, and four Resampler iteration counts.
 
-    Layout:
-      Row 1: native cell-mean field | raw bilinear upsample (drifts) | linear iter=N0
-      Row 2: linear iter=N1 | linear iter=N2 | linear iter=N3
-
-    Each "linear iter=N" panel is the output of `downscale_plane(arr, factor,
-    iterations=N)`. With N=1 the per-parent additive correction is constant
-    inside each parent block, which produces a visible blocky pattern at
-    parent boundaries. Higher N distributes the correction bilinearly across
-    children, smoothing the pattern; a final hard correction step still
-    guarantees exact per-parent mean preservation regardless of N.
-
-    At factor=1 there is nothing to downscale; the function returns a
-    single-panel figure of the native field.
+    Each "linear iter=N" panel applies the value-independent Resampler matrix
+    (N iterations) for a factor-N refinement; every refined panel preserves the
+    parent cell mean exactly regardless of N.
     """
     _require_matplotlib()
     if factor < 1:
         raise ValueError(f"factor must be >= 1, got {factor}")
     if len(iterations) != 4 or any(it < 1 for it in iterations):
-        raise ValueError(
-            f"iterations must be a 4-tuple of positive ints, got {iterations!r}",
-        )
+        raise ValueError(f"iterations must be a 4-tuple of positive ints, got {iterations!r}")
 
     arr = np.asarray(da_slice.values if isinstance(da_slice, xr.DataArray) else da_slice)
     if arr.ndim != 2:
         raise ValueError(f"da_slice must be 2-D, got ndim={arr.ndim}")
+    lats = np.asarray(lats, dtype=np.float64)
+    lons = np.asarray(lons, dtype=np.float64)
 
     if factor == 1:
         fig, ax = plt.subplots(1, 1, figsize=(figsize[0] / 3, figsize[1] / 2))
-        xmin, xmax, ymin, ymax = _grid_extent(grid)
-        im = ax.imshow(
-            arr, origin="lower", extent=(xmin, xmax, ymin, ymax), cmap=cmap, aspect="equal",
-        )
+        xmin, xmax, ymin, ymax = _grid_extent(lats, lons)
+        im = ax.imshow(arr, origin="lower", extent=(xmin, xmax, ymin, ymax), cmap=cmap, aspect="equal")
         ax.set_title(native_label)
         ax.set_xlabel("longitude")
         ax.set_ylabel("latitude")
         fig.colorbar(im, ax=ax)
         return fig
 
-    refined_grid = refine_grid(grid, factor)
+    r_lats = _subdivide(lats, factor)
+    r_lons = _subdivide(lons, factor)
     bilinear_raw = ndimage.zoom(arr, factor, order=1, mode="nearest", grid_mode=True)
-    iter_outputs = [downscale_plane(arr, factor, iterations=it) for it in iterations]
+
+    def _linear(it: int) -> np.ndarray:
+        transform = Resampler.compute(lats, lons, r_lats, r_lons, iterations=it).transform_matrix
+        return (transform @ arr.ravel()).reshape(r_lats.size, r_lons.size)
+
+    iter_outputs = [_linear(it) for it in iterations]
 
     panels = [
-        (arr, grid, native_label),
-        (bilinear_raw, refined_grid, "bilinear (raw, not mean-preserving)"),
-        (iter_outputs[0], refined_grid, f"linear iter={iterations[0]} (constant correction)"),
-        (iter_outputs[1], refined_grid, f"linear iter={iterations[1]}"),
-        (iter_outputs[2], refined_grid, f"linear iter={iterations[2]}"),
-        (iter_outputs[3], refined_grid, f"linear iter={iterations[3]} (smoothed)"),
+        (arr, lats, lons, native_label),
+        (bilinear_raw, r_lats, r_lons, "bilinear (raw, not mean-preserving)"),
+        (iter_outputs[0], r_lats, r_lons, f"linear iter={iterations[0]} (constant correction)"),
+        (iter_outputs[1], r_lats, r_lons, f"linear iter={iterations[1]}"),
+        (iter_outputs[2], r_lats, r_lons, f"linear iter={iterations[2]}"),
+        (iter_outputs[3], r_lats, r_lons, f"linear iter={iterations[3]} (smoothed)"),
     ]
     vmin = min(float(p[0].min()) for p in panels)
     vmax = max(float(p[0].max()) for p in panels)
 
     fig, axes = plt.subplots(2, 3, figsize=figsize)
     im = None
-    for ax, (data, g, title) in zip(axes.flat, panels, strict=True):
-        xmin, xmax, ymin, ymax = _grid_extent(g)
+    for ax, (data, plats, plons, title) in zip(axes.flat, panels, strict=True):
+        xmin, xmax, ymin, ymax = _grid_extent(plats, plons)
         im = ax.imshow(
-            data, origin="lower",
-            extent=(xmin, xmax, ymin, ymax),
-            vmin=vmin, vmax=vmax,
-            cmap=cmap, aspect="equal",
+            data, origin="lower", extent=(xmin, xmax, ymin, ymax),
+            vmin=vmin, vmax=vmax, cmap=cmap, aspect="equal",
         )
         ax.set_title(title)
         ax.set_xlabel("longitude")
@@ -263,24 +247,20 @@ def plot_downscale_comparison(
 
 def plot_aggregate_choropleth(
     aggregated: xr.DataArray,
-    polygons: PolygonSet,
+    geoms: gpd.GeoSeries,
     *,
     ax: "Axes | None" = None,
     cmap: str = "viridis",
     title: str | None = None,
-    polygon_dim: str = "polygon",
+    geom_dim: str = "geom",
     edgecolor: str = "black",
     linewidth: float = 0.3,
 ) -> "Axes":
-    """Polygons coloured by their final aggregated value.
-
-    `aggregated` must be 1-D after reducing batch dims (e.g.,
-    `aggregate(da, w).isel(number=0, step=0)` for a single member/lead time).
-    """
+    """Polygons coloured by their final aggregated value (1-D over `geom_dim`)."""
     _require_matplotlib()
     if aggregated.ndim != 1:
         raise ValueError(
-            f"aggregated must be 1-D over `{polygon_dim}`; got dims={aggregated.dims}. "
+            f"aggregated must be 1-D over `{geom_dim}`; got dims={aggregated.dims}. "
             "Reduce or select batch dims before plotting.",
         )
     if ax is None:
@@ -290,34 +270,24 @@ def plot_aggregate_choropleth(
     finite = np.isfinite(values)
     if not finite.any():
         raise ValueError("aggregated has no finite values to plot")
-    vmin = float(values[finite].min())
-    vmax = float(values[finite].max())
-    norm = plt.Normalize(vmin=vmin, vmax=vmax)
+    norm = plt.Normalize(vmin=float(values[finite].min()), vmax=float(values[finite].max()))
     colormap = plt.get_cmap(cmap)
 
-    poly_index = aggregated[polygon_dim].to_index()
-    polygons_lookup = dict(zip(polygons.keys, polygons.geoms, strict=True))
+    poly_index = aggregated[geom_dim].to_index()
+    lookup = dict(zip(geoms.index, geoms.to_numpy(), strict=True))
 
     for value, key in zip(values, poly_index, strict=True):
-        lookup_key = key if isinstance(key, tuple) else (key,)
-        geom = polygons_lookup.get(lookup_key)
+        geom = lookup.get(key)
         if geom is None:
             continue
-        if not np.isfinite(value):
-            _draw_polygon(ax, geom, facecolor="lightgray", edgecolor=edgecolor, linewidth=linewidth)
-        else:
-            _draw_polygon(
-                ax, geom,
-                facecolor=colormap(norm(value)),
-                edgecolor=edgecolor,
-                linewidth=linewidth,
-            )
+        facecolor = "lightgray" if not np.isfinite(value) else colormap(norm(value))
+        _draw_polygon(ax, geom, facecolor=facecolor, edgecolor=edgecolor, linewidth=linewidth)
 
     sm = plt.cm.ScalarMappable(norm=norm, cmap=colormap)
     plt.colorbar(sm, ax=ax, label=aggregated.name or "aggregated value")
 
-    xs = [b for g in polygons.geoms for b in g.bounds[::2]]
-    ys = [b for g in polygons.geoms for b in g.bounds[1::2]]
+    xs = [b for g in geoms.to_numpy() for b in g.bounds[::2]]
+    ys = [b for g in geoms.to_numpy() for b in g.bounds[1::2]]
     if xs and ys:
         ax.set_xlim(min(xs), max(xs))
         ax.set_ylim(min(ys), max(ys))
@@ -327,12 +297,3 @@ def plot_aggregate_choropleth(
     if title:
         ax.set_title(title)
     return ax
-
-
-def _edges(centres: np.ndarray) -> np.ndarray:
-    if centres.size < 2:
-        raise ValueError("need >= 2 coordinates to derive edges")
-    mids = (centres[:-1] + centres[1:]) / 2.0
-    first = centres[0] - (mids[0] - centres[0])
-    last = centres[-1] + (centres[-1] - mids[-1])
-    return np.concatenate([[first], mids, [last]])

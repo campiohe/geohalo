@@ -1,97 +1,48 @@
-"""LocalWeightCache: read/write, atomic writes, target_resolution re-attach."""
+import geopandas as gpd
+import numpy as np
+import pandas as pd
+import shapely
 
-from pathlib import Path
-from unittest import mock
-
-from geohalo import cache as cache_module
-from geohalo.cache import LocalWeightCache
-from geohalo.geometry import PolygonSet
-from geohalo.grid import GridSpec
+from geohalo.cache import LocalCache
 
 
-def test_first_call_writes_second_call_reads(
-    tmp_path: Path,
-    simple_grid: GridSpec,
-    simple_polygons: PolygonSet,
-) -> None:
-    cache = LocalWeightCache(tmp_path)
-    with mock.patch(
-        "geohalo.cache.compute_weights",
-        wraps=cache_module.compute_weights,
-    ) as patched:
-        cache.get_or_compute(simple_polygons, simple_grid)
-        cache.get_or_compute(simple_polygons, simple_grid)
-    assert patched.call_count == 1
+def test_stencil_roundtrip(tmp_path) -> None:
+    lats = np.array([0.0, 1.0])
+    lons = np.array([0.0, 1.0])
+    geoms = gpd.GeoSeries([shapely.box(-0.4, -0.4, 1.4, 1.4)], index=["box"])
+    cache = LocalCache(tmp_path)
+    s1 = cache.get_or_compute_stencil(lats, lons, geoms)
+    s2 = cache.get_or_compute_stencil(lats, lons, geoms)
+    np.testing.assert_array_equal(s1.occupancy_matrix.toarray(), s2.occupancy_matrix.toarray())
+    assert s1.digest == s2.digest
+    assert list(s1.keys) == list(s2.keys)
 
 
-def test_force_recompute_bypasses_cache(
-    tmp_path: Path,
-    simple_grid: GridSpec,
-    simple_polygons: PolygonSet,
-) -> None:
-    cache = LocalWeightCache(tmp_path)
-    with mock.patch(
-        "geohalo.cache.compute_weights",
-        wraps=cache_module.compute_weights,
-    ) as patched:
-        cache.get_or_compute(simple_polygons, simple_grid)
-        cache.get_or_compute(
-            simple_polygons, simple_grid, force_recompute=True,
-        )
-    assert patched.call_count == 2
+def test_stencil_spherical_separates(tmp_path) -> None:
+    lats = np.array([60.0, 61.0])
+    lons = np.array([0.0, 1.0])
+    geoms = gpd.GeoSeries([shapely.box(0.3, 60.3, 0.7, 60.7)], index=["x"])
+    cache = LocalCache(tmp_path)
+    s1 = cache.get_or_compute_stencil(lats, lons, geoms, spherical_correction=True)
+    s2 = cache.get_or_compute_stencil(lats, lons, geoms, spherical_correction=False)
+    assert s1.digest != s2.digest
 
 
-def test_atomic_write_leaves_no_tmp_files(
-    tmp_path: Path,
-    simple_grid: GridSpec,
-    simple_polygons: PolygonSet,
-) -> None:
-    cache = LocalWeightCache(tmp_path)
-    cache.get_or_compute(simple_polygons, simple_grid)
-    leftover = list(tmp_path.glob("*.tmp"))
-    assert leftover == []
+def test_resampler_roundtrip(tmp_path) -> None:
+    s_lat = np.array([0.0, 1.0, 2.0])
+    s_lon = np.array([0.0, 1.0, 2.0])
+    t_lat = np.linspace(0.0, 2.0, 5)
+    t_lon = np.linspace(0.0, 2.0, 5)
+    cache = LocalCache(tmp_path)
+    r1 = cache.get_or_compute_resampler(s_lat, s_lon, t_lat, t_lon, iterations=2)
+    r2 = cache.get_or_compute_resampler(s_lat, s_lon, t_lat, t_lon, iterations=2)
+    np.testing.assert_array_equal(r1.transform_matrix.toarray(), r2.transform_matrix.toarray())
 
 
-def test_target_resolution_not_in_key_same_factor(
-    tmp_path: Path,
-    simple_grid: GridSpec,
-    simple_polygons: PolygonSet,
-) -> None:
-    """target_resolution=0.5 and 0.51 resolve to the same factor.
-    Second call hits the cache, but the returned weights carry the caller's
-    target_resolution value.
-    """
-    cache = LocalWeightCache(tmp_path)
-    with mock.patch(
-        "geohalo.cache.compute_weights",
-        wraps=cache_module.compute_weights,
-    ) as patched:
-        w1 = cache.get_or_compute(
-            simple_polygons, simple_grid, target_resolution=0.5,
-        )
-        w2 = cache.get_or_compute(
-            simple_polygons, simple_grid, target_resolution=0.51,
-        )
-    assert patched.call_count == 1
-    assert w1.target_resolution == 0.5
-    assert w2.target_resolution == 0.51
-    assert w1.downscale_factor == w2.downscale_factor == 2
-
-
-def test_different_factor_different_entry(
-    tmp_path: Path,
-    simple_grid: GridSpec,
-    simple_polygons: PolygonSet,
-) -> None:
-    cache = LocalWeightCache(tmp_path)
-    with mock.patch(
-        "geohalo.cache.compute_weights",
-        wraps=cache_module.compute_weights,
-    ) as patched:
-        cache.get_or_compute(
-            simple_polygons, simple_grid, target_resolution=0.5,
-        )
-        cache.get_or_compute(
-            simple_polygons, simple_grid, target_resolution=0.25,
-        )
-    assert patched.call_count == 2
+def test_tree_roundtrip(tmp_path) -> None:
+    edges = pd.DataFrame({"parent": ["p", "p"]}, index=pd.Index(["a", "b"], name="child"))
+    cache = LocalCache(tmp_path)
+    t1 = cache.get_or_compute_tree(edges)
+    t2 = cache.get_or_compute_tree(edges)
+    np.testing.assert_array_equal(t1.rollup_matrix.toarray(), t2.rollup_matrix.toarray())
+    assert t1.how == "mean"

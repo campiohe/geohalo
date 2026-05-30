@@ -1,29 +1,31 @@
-from geohalo.aggregate import aggregate
-from geohalo.bias import BiasHierarchy, compute_bias
-from geohalo.cache import LocalWeightCache, RedisWeightCache
-from geohalo.downscale import (
-    build_downscale_operator,
-    downscale_plane,
-    refine_grid,
-    resolve_factor,
+from geohalo.api import (
+    aggregate_bias,
+    aggregate_bias_with_tree,
+    reduce,
+    reduce_with_operator,
+    reduce_with_stencil,
+    resample_grid,
+    resample_grid_with_matrix,
 )
-from geohalo.geometry import PolygonSet
-from geohalo.grid import GridSpec
-from geohalo.weights import EmptyCoverageError, Weights, compute_weights
+from geohalo.bias_tree import BiasTree
+from geohalo.cache import LocalCache, RedisCache
+from geohalo.reduce_operator import ReduceOperator
+from geohalo.resampler import Resampler
+from geohalo.stencil import EmptyOverlapError, Stencil
 
 __all__ = [
-    "BiasHierarchy",
-    "EmptyCoverageError",
-    "GridSpec",
-    "LocalWeightCache",
-    "PolygonSet",
-    "RedisWeightCache",
-    "Weights",
-    "aggregate",
-    "build_downscale_operator",
-    "compute_bias",
-    "compute_weights",
-    "downscale_plane",
-    "refine_grid",
-    "resolve_factor",
+    "BiasTree",
+    "EmptyOverlapError",
+    "LocalCache",
+    "RedisCache",
+    "ReduceOperator",
+    "Resampler",
+    "Stencil",
+    "aggregate_bias",
+    "aggregate_bias_with_tree",
+    "reduce",
+    "reduce_with_operator",
+    "reduce_with_stencil",
+    "resample_grid",
+    "resample_grid_with_matrix",
 ]
