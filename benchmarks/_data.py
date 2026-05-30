@@ -1,6 +1,6 @@
 """Shared fixtures: GADM fetch, polygon construction, grid, hierarchies.
 
-Used by `benchmarks/run.py` and `examples/visualize.py`.
+Used by `benchmarks/run.py`.
 """
 
 import datetime as dt
