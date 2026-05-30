@@ -15,3 +15,6 @@ wheels/
 htmlcov/
 .hypothesis/
 .pytest_cache/
+
+# MkDocs build output
+site/
