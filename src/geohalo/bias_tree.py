@@ -88,10 +88,33 @@ class BiasTree:
 
         return cls(
             rollup_matrix=matrix.tocsr(),
-            keys=pd.Index(nodes_list, name=edges.index.name, tupleize_cols=False),
+            keys=_build_keys(nodes_list, edges.index),
             digest=tree_digest(edges, parent_col=parent_col, weight_col=weight_col, how=how),
             how=how,
         )
+
+
+def _build_keys(nodes_list: list[Hashable], index: pd.Index) -> pd.Index:
+    """Build the node-keys Index, matching the input MultiIndex when arity allows.
+
+    When the input is a ``pd.MultiIndex`` and *every* node — each leaf and each
+    parent — is a tuple of ``index.nlevels`` levels (a same-arity rollup, e.g.
+    ``(scenario, region)`` leaves into ``(scenario, "ALL")``), the output is a
+    real ``pd.MultiIndex`` with the level names preserved, so the rolled-up
+    ``geom`` coord stays selectable on its levels like every other operator.
+
+    A varying-arity hierarchy (parents shorter than leaves, e.g.
+    ``(BR, SP, muni)`` into ``(BR, SP)`` into ``(BR,)``) cannot be one
+    MultiIndex — pandas requires a uniform level count — so it falls back to a
+    flat object Index of tuples, as do scalar keys. ``tupleize_cols=False`` stops
+    pandas auto-tupleizing the tuple nodes back into a (NaN-padded) MultiIndex.
+    """
+    if isinstance(index, pd.MultiIndex):
+        nlevels = index.nlevels
+        same_arity = all(isinstance(n, tuple) and len(n) == nlevels for n in nodes_list)
+        if same_arity:
+            return pd.MultiIndex.from_tuples(nodes_list, names=index.names)
+    return pd.Index(nodes_list, name=index.name, tupleize_cols=False)
 
 
 def _node_depth(parent_of: dict[Hashable, Hashable], leaves: set[Hashable]) -> dict[Hashable, int]:
@@ -119,7 +142,13 @@ def tree_digest(
     """Cache key for a bias tree, derivable from inputs without building it."""
     h = hashlib.sha256()
     h.update(how.encode())
-    h.update(repr(edges.index.name).encode())
+    # A MultiIndex has no scalar `.name` (it would be None, dropping the level names);
+    # hash its `.names` list so trees differing only in level names get distinct keys.
+    # Flat indices keep hashing the scalar name, so their digests are unchanged.
+    if isinstance(edges.index, pd.MultiIndex):
+        h.update(repr(list(edges.index.names)).encode())
+    else:
+        h.update(repr(edges.index.name).encode())
     if weight_col is not None:
         rows = list(zip(edges.index, edges[parent_col], edges[weight_col], strict=True))
     else:
