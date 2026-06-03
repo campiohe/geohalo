@@ -1,6 +1,6 @@
 """Public API: reduce(_with_stencil), resample_grid(_with_matrix), aggregate_bias(_with_tree)."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Hashable
 from typing import Literal
 
 import geopandas as gpd
@@ -42,7 +42,20 @@ def _map_spatial_vars(
     for n in ds.data_vars:
         if n not in spatial:
             out[n] = ds[n]
+    out.attrs = dict(ds.attrs)  # the per-var fn carries var attrs; the dataset-level attrs need this
     return out
+
+
+def _carryover_coords(src: xr.DataArray, keep_dims: list[str]) -> dict[Hashable, xr.DataArray]:
+    """Coords of `src` whose dims all survive — scalar coords and batch-aligned aux coords.
+
+    Subsumes the dimension coordinates of `keep_dims` and additionally preserves
+    scalar coords (``dims == ()``) and auxiliary coords aligned to a retained dim
+    (e.g. ``valid_time`` along ``time``). Coords touching the collapsed/replaced
+    spatial dims are excluded — their dims are not in `keep_dims`.
+    """
+    keep = set(keep_dims)
+    return {name: c for name, c in src.coords.items() if set(c.dims) <= keep}
 
 
 def _apply_matrix_da(
@@ -70,7 +83,9 @@ def _apply_matrix_da(
     return xr.DataArray(
         out,
         dims=(*batch_dims, lat_dim, lon_dim),
-        coords={**{d: da[d] for d in batch_dims}, lat_dim: out_lat, lon_dim: out_lon},
+        coords={**_carryover_coords(da, batch_dims), lat_dim: out_lat, lon_dim: out_lon},
+        name=da.name,
+        attrs=dict(da.attrs),
     )
 
 
@@ -155,7 +170,9 @@ def reduce_with_operator[T: xr.DataArray | xr.Dataset](
     return xr.DataArray(
         out,
         dims=(*batch_dims, geom_dim),
-        coords={**{d: grid[d] for d in batch_dims}, geom_dim: _geom_coord(operator.keys, geom_dim)},
+        coords={**_carryover_coords(grid, batch_dims), geom_dim: _geom_coord(operator.keys, geom_dim)},
+        name=grid.name,
+        attrs=dict(grid.attrs),
     )
 
 
@@ -262,7 +279,9 @@ def _reduce_masked_da(
     return xr.DataArray(
         out,
         dims=(*batch_dims, geom_dim),
-        coords={**{d: da[d] for d in batch_dims}, geom_dim: _geom_coord(stencil.keys, geom_dim)},
+        coords={**_carryover_coords(da, batch_dims), geom_dim: _geom_coord(stencil.keys, geom_dim)},
+        name=da.name,
+        attrs=dict(da.attrs),
     )
 
 
@@ -360,7 +379,9 @@ def aggregate_bias_with_tree[T: xr.DataArray | xr.Dataset](
     return xr.DataArray(
         out,
         dims=(*batch_dims, geom_dim),
-        coords={**{d: leaves[d] for d in batch_dims}, geom_dim: _geom_coord(tree.keys, geom_dim)},
+        coords={**_carryover_coords(leaves, batch_dims), geom_dim: _geom_coord(tree.keys, geom_dim)},
+        name=leaves.name,
+        attrs=dict(leaves.attrs),
     )
 
 
