@@ -2,62 +2,62 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://campiohe.github.io/geohalo/</loc>
-         <lastmod>2026-05-30</lastmod>
+         <lastmod>2026-06-03</lastmod>
     </url>
     <url>
          <loc>https://campiohe.github.io/geohalo/api/</loc>
-         <lastmod>2026-05-30</lastmod>
+         <lastmod>2026-06-03</lastmod>
     </url>
     <url>
          <loc>https://campiohe.github.io/geohalo/benchmark/</loc>
-         <lastmod>2026-05-30</lastmod>
+         <lastmod>2026-06-03</lastmod>
     </url>
     <url>
          <loc>https://campiohe.github.io/geohalo/performance/</loc>
-         <lastmod>2026-05-30</lastmod>
+         <lastmod>2026-06-03</lastmod>
     </url>
     <url>
          <loc>https://campiohe.github.io/geohalo/quickstart/</loc>
-         <lastmod>2026-05-30</lastmod>
+         <lastmod>2026-06-03</lastmod>
     </url>
     <url>
          <loc>https://campiohe.github.io/geohalo/concepts/bias-tree/</loc>
-         <lastmod>2026-05-30</lastmod>
+         <lastmod>2026-06-03</lastmod>
     </url>
     <url>
          <loc>https://campiohe.github.io/geohalo/concepts/downscaling/</loc>
-         <lastmod>2026-05-30</lastmod>
+         <lastmod>2026-06-03</lastmod>
     </url>
     <url>
          <loc>https://campiohe.github.io/geohalo/concepts/exact-coverage/</loc>
-         <lastmod>2026-05-30</lastmod>
+         <lastmod>2026-06-03</lastmod>
     </url>
     <url>
          <loc>https://campiohe.github.io/geohalo/concepts/latitude-correction/</loc>
-         <lastmod>2026-05-30</lastmod>
+         <lastmod>2026-06-03</lastmod>
     </url>
     <url>
          <loc>https://campiohe.github.io/geohalo/concepts/linear-operator/</loc>
-         <lastmod>2026-05-30</lastmod>
+         <lastmod>2026-06-03</lastmod>
     </url>
     <url>
          <loc>https://campiohe.github.io/geohalo/concepts/masked/</loc>
-         <lastmod>2026-05-30</lastmod>
+         <lastmod>2026-06-03</lastmod>
     </url>
     <url>
          <loc>https://campiohe.github.io/geohalo/concepts/reduce-operator/</loc>
-         <lastmod>2026-05-30</lastmod>
+         <lastmod>2026-06-03</lastmod>
     </url>
     <url>
          <loc>https://campiohe.github.io/geohalo/concepts/stencil/</loc>
-         <lastmod>2026-05-30</lastmod>
+         <lastmod>2026-06-03</lastmod>
     </url>
     <url>
          <loc>https://campiohe.github.io/geohalo/guides/caching/</loc>
-         <lastmod>2026-05-30</lastmod>
+         <lastmod>2026-06-03</lastmod>
     </url>
     <url>
          <loc>https://campiohe.github.io/geohalo/guides/resampling/</loc>
-         <lastmod>2026-05-30</lastmod>
+         <lastmod>2026-06-03</lastmod>
     </url>
 </urlset>
