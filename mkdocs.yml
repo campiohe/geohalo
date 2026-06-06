@@ -4,6 +4,8 @@ site_url: https://campiohe.github.io/geohalo/
 repo_url: https://github.com/campiohe/geohalo
 repo_name: campiohe/geohalo
 docs_dir: docs
+exclude_docs: |
+  superpowers/
 copyright: MIT-licensed · built with exactextract, scipy, and xarray
 
 theme:

@@ -20,6 +20,11 @@ refining; coarsening can't preserve a source cell that has no target child).
 `resample_grid` accepts an `xr.DataArray` or an `xr.Dataset` (every spatial data variable
 is resampled, the rest pass through) and preserves all non-spatial dims.
 
+For non-negative variables such as precipitation, add `floor=0.0` — the output
+is clipped at the bound while each source cell's child mean is still preserved
+exactly. See [Mean-preserving downscaling](../concepts/downscaling.md#non-negative-variables-floor)
+for how the clip-and-rescale works.
+
 ## Separating build from apply
 
 `resample_grid` builds a `Resampler` and applies it in one shot. To reuse the transform

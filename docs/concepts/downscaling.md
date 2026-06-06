@@ -127,6 +127,48 @@ The dense \(N_\text{target}^2\) matrix is never built. The build stays sub-secon
 for large refinements; cost grows with `iterations` only because the transform *fills
 in* as its reach expands. The default `iterations = 1` is the cheapest.
 
+## Non-negative variables (`floor=`)
+
+The refinement series and the per-block correction are *signed*: near a sharp
+gradient (a wet cell beside dry ones) the smooth surface can overshoot below
+zero, and the block-constant correction \(\mathbf{P}(x - \mathbf{A}y)\) can push
+an entire dry block negative — even though bilinear interpolation alone never
+would. For precipitation, wind speed, or concentrations that is unphysical.
+
+`floor=` clips the output at a lower bound **without giving up mean
+preservation**. After the linear transform, each source-cell block is clipped
+and its deviations-from-floor rescaled in closed form:
+
+\[
+y'' = f + \bigl(\max(y, f) - f\bigr)\cdot
+      \frac{x_\text{parent} - f}{\overline{\max(y, f) - f}}
+\]
+
+so every child stays \(\ge f\) *and* the block's child mean equals the source
+value exactly — one pass, no iteration.
+
+```python
+fine = ghl.resample_grid(da, target_resolution=0.05, iterations=3, floor=0.0)
+```
+
+Details that matter:
+
+- The transform matrix \(\mathbf{T}\) stays linear and cacheable — the floor is
+  a value-dependent post-step at apply time, so digests and caches are
+  untouched.
+- A source cell already below the floor (e.g. a tiny negative precipitation
+  artifact in the input) gets its block filled with the floor: the bound is
+  guaranteed everywhere, and the mean is knowingly broken only where the input
+  itself violated it.
+- Blocks whose children all clip are filled with the parent value; NaN blocks
+  stay NaN.
+- For a `Dataset`, pass a mapping to bound only some variables:
+  `floor={"tp": 0.0}`.
+- `reduce(..., target_resolution=...)` does **not** take `floor` — the fused
+  operator never materialises the fine field, and a nonlinear clip cannot pass
+  through the fusion. When per-polygon values must respect the bound, do the
+  explicit two-step: `resample_grid(..., floor=0.0)` then `reduce`.
+
 ## Two forms of the resampler
 
 geohalo ships the transform in two shapes for two different needs:
