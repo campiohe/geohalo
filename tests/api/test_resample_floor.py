@@ -69,3 +69,38 @@ def test_mapping_floor_on_dataarray_raises() -> None:
     da, _, _ = _sharp_field()
     with pytest.raises(TypeError, match="Dataset"):
         resample_grid(da, target_resolution=0.25, floor={"tp": 0.0})
+
+
+def _sharp_dataset():
+    da, lats, lons = _sharp_field()
+    temp = _da(np.full((5, 5), 280.0), lats, lons)
+    ds = xr.Dataset({"tp": da, "t2m": temp, "scalar_meta": 1.0})
+    return ds, lats, lons
+
+
+def test_dataset_float_floors_all_spatial_vars() -> None:
+    ds, _, _ = _sharp_dataset()
+    out = resample_grid(ds, target_resolution=0.25, iterations=4, floor=0.0)
+    assert float(out["tp"].min()) >= 0.0
+    assert float(out["t2m"].min()) >= 0.0
+    assert "scalar_meta" in out  # non-spatial vars pass through untouched
+
+
+def test_dataset_mapping_floors_named_var_only() -> None:
+    ds, _, _ = _sharp_dataset()
+    out = resample_grid(ds, target_resolution=0.25, iterations=4, floor={"tp": 0.0})
+    base = resample_grid(ds, target_resolution=0.25, iterations=4)
+    assert float(out["tp"].min()) >= 0.0
+    np.testing.assert_array_equal(out["t2m"].values, base["t2m"].values)  # untouched, bit-for-bit
+
+
+def test_dataset_mapping_unknown_var_raises() -> None:
+    ds, _, _ = _sharp_dataset()
+    with pytest.raises(ValueError, match="not spatial data vars"):
+        resample_grid(ds, target_resolution=0.25, floor={"typo": 0.0})
+
+
+def test_dataset_mapping_nonspatial_var_raises() -> None:
+    ds, _, _ = _sharp_dataset()
+    with pytest.raises(ValueError, match="not spatial data vars"):
+        resample_grid(ds, target_resolution=0.25, floor={"scalar_meta": 0.0})
