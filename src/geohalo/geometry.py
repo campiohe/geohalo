@@ -164,3 +164,20 @@ def nearest_index(source: np.ndarray, target: np.ndarray) -> np.ndarray:
     choose_left = (target - left) <= (right - target)
     idx = np.where(choose_left, pos - 1, pos)
     return idx if ascending else n_s - 1 - idx
+
+
+def parent_flat_2d(
+    source_lat: np.ndarray,
+    source_lon: np.ndarray,
+    target_lat: np.ndarray,
+    target_lon: np.ndarray,
+) -> np.ndarray:
+    """Flat source-cell index of the nearest parent for each target cell.
+
+    Shape ``(n_target_lat * n_target_lon,)``; flat index is
+    ``lat_parent * n_source_lon + lon_parent``, matching the row-major
+    flattening used everywhere else.
+    """
+    parent_lat = nearest_index(source_lat, target_lat)
+    parent_lon = nearest_index(source_lon, target_lon)
+    return (parent_lat[:, None] * source_lon.size + parent_lon[None, :]).ravel()

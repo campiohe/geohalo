@@ -1,6 +1,6 @@
 import numpy as np
 
-from geohalo.geometry import bilinear_matrix_1d, nearest_index
+from geohalo.geometry import bilinear_matrix_1d, nearest_index, parent_flat_2d
 
 
 def test_bilinear_identity_when_same_grid() -> None:
@@ -65,3 +65,20 @@ def test_bilinear_single_source_cell_maps_all_targets() -> None:
 def test_nearest_index_single_source_cell() -> None:
     idx = nearest_index(np.array([5.0]), np.array([4.0, 5.0, 6.0]))
     np.testing.assert_array_equal(idx, [0, 0, 0])
+
+
+def test_parent_flat_2d_refine() -> None:
+    s_lat = np.array([0.0, 1.0])
+    s_lon = np.array([0.0, 1.0])
+    t_lat = np.array([0.0, 0.4, 0.6, 1.0])
+    t_lon = np.array([0.0, 0.4, 0.6, 1.0])
+    # nearest parent per axis is [0, 0, 1, 1]; flat = lat_parent * n_s_lon + lon_parent
+    expected = np.array(
+        [
+            [0, 0, 1, 1],
+            [0, 0, 1, 1],
+            [2, 2, 3, 3],
+            [2, 2, 3, 3],
+        ]
+    ).ravel()
+    np.testing.assert_array_equal(parent_flat_2d(s_lat, s_lon, t_lat, t_lon), expected)

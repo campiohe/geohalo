@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import numpy as np
 import scipy.sparse as sp
 
-from geohalo.geometry import bilinear_matrix_1d, nearest_index
+from geohalo.geometry import bilinear_matrix_1d, parent_flat_2d
 
 
 @dataclass(frozen=True)
@@ -75,9 +75,7 @@ def _build_factors(
         format="csr",
     )
 
-    parent_lat = nearest_index(source_lat, target_lat)
-    parent_lon = nearest_index(source_lon, target_lon)
-    parent_flat = (parent_lat[:, None] * n_s_lon + parent_lon[None, :]).ravel()
+    parent_flat = parent_flat_2d(source_lat, source_lon, target_lat, target_lon)
     t_idx = np.arange(n_t)
 
     p = sp.csr_matrix((np.ones(n_t), (t_idx, parent_flat)), shape=(n_t, n_s))
