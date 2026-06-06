@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 import xarray as xr
+from hypothesis import given, settings, strategies as st
 
 from geohalo.api import resample_grid, resample_grid_with_matrix
 from geohalo.geometry import parent_flat_2d
@@ -104,3 +105,44 @@ def test_dataset_mapping_nonspatial_var_raises() -> None:
     ds, _, _ = _sharp_dataset()
     with pytest.raises(ValueError, match="not spatial data vars"):
         resample_grid(ds, target_resolution=0.25, floor={"scalar_meta": 0.0})
+
+
+def test_floor_descending_lats_match_ascending() -> None:
+    da, _, _ = _sharp_field()
+    out_asc = resample_grid(da, target_resolution=0.25, iterations=4, floor=0.0)
+    out_desc = resample_grid(
+        da.sortby("latitude", ascending=False), target_resolution=0.25, iterations=4, floor=0.0,
+    )
+    np.testing.assert_allclose(out_desc.sortby("latitude").values, out_asc.values, atol=1e-12)
+
+
+def test_floor_batched_matches_per_slice() -> None:
+    da, lats, lons = _sharp_field()
+    batched = _da(np.stack([da.values, 2.0 * da.values]), lats, lons, extra_dims=("member",))
+    out = resample_grid(batched, target_resolution=0.25, iterations=4, floor=0.0)
+    slice0 = resample_grid(da, target_resolution=0.25, iterations=4, floor=0.0)
+    np.testing.assert_allclose(out.isel(member=0).values, slice0.values, atol=1e-12)
+    assert float(out.min()) >= 0.0
+
+
+def test_floor_nan_footprint_matches_linear_path() -> None:
+    da, _, _ = _sharp_field()
+    da = da.copy()
+    da.values[0, 0] = np.nan
+    base = resample_grid(da, target_resolution=0.25, iterations=4)
+    out = resample_grid(da, target_resolution=0.25, iterations=4, floor=0.0)
+    np.testing.assert_array_equal(np.isnan(out.values), np.isnan(base.values))
+
+
+@given(seed=st.integers(0, 2**32 - 1))
+@settings(max_examples=25, deadline=None)
+def test_property_floored_output_nonneg_and_mean_preserving(seed: int) -> None:
+    rng = np.random.default_rng(seed)
+    lats = np.arange(0.0, 3.0)
+    lons = np.arange(0.0, 4.0)
+    # sparse non-negative field: many exact zeros next to positive cells
+    vals = np.maximum(rng.normal(0.0, 1.0, size=(3, 4)), 0.0)
+    da = _da(vals, lats, lons)
+    out = resample_grid(da, target_resolution=0.25, iterations=3, floor=0.0)
+    assert float(out.min()) >= 0.0
+    np.testing.assert_allclose(_block_means(out, lats, lons), vals, atol=1e-9)
