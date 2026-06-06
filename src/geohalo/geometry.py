@@ -181,3 +181,44 @@ def parent_flat_2d(
     parent_lat = nearest_index(source_lat, target_lat)
     parent_lon = nearest_index(source_lon, target_lon)
     return (parent_lat[:, None] * source_lon.size + parent_lon[None, :]).ravel()
+
+
+def floor_blocks(
+    resampled: np.ndarray,
+    source_flat: np.ndarray,
+    parent_flat: np.ndarray,
+    floor: float,
+) -> np.ndarray:
+    """Clip a resampled batch at `floor`, restoring each source-cell block's mean.
+
+    `resampled` is ``(batch, n_target)``, `source_flat` is ``(batch, n_source)``,
+    `parent_flat` maps each target cell to its nearest source cell (see
+    :func:`parent_flat_2d`). Each block's deviations-from-floor are rescaled
+    multiplicatively, so the (uniform) child mean equals the source value
+    exactly while staying ``>= floor``. Rules, in precedence order:
+
+    1. blocks that contain NaN stay NaN — the NaN footprint is unchanged;
+    2. a source value below `floor` fills its block with `floor` (mean
+       knowingly broken only where the input already violated the floor);
+    3. a block whose children all clipped to `floor` (parent above floor)
+       is filled with the parent value;
+    4. otherwise: ``out = floor + (clip(y) - floor) * (x - floor) / mean(clip(y) - floor)``.
+    """
+    n_source = source_flat.shape[-1]
+    n_target = parent_flat.size
+    counts = np.bincount(parent_flat, minlength=n_source)
+    adj = sp.csr_matrix(
+        (np.ones(n_target), (parent_flat, np.arange(n_target))),
+        shape=(n_source, n_target),
+    )
+    deviation = np.maximum(resampled, floor) - floor  # >= 0; NaN propagates
+    block_sum = np.asarray(deviation @ adj.T)  # (batch, n_source); NaN children poison their block
+    with np.errstate(invalid="ignore", divide="ignore"):
+        mean_dev = block_sum / np.maximum(counts, 1)
+        scale = (source_flat - floor) / mean_dev
+        out = floor + deviation * scale[..., parent_flat]
+    child_src = source_flat[..., parent_flat]
+    # rule 3: every child clipped (scale was 0/0 or inf) -> constant parent fill
+    out = np.where((mean_dev == 0.0)[..., parent_flat], child_src, out)
+    # rule 2: source already violates the floor -> constant floor fill
+    return np.where(child_src < floor, floor, out)
