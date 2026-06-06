@@ -117,7 +117,8 @@ def resample_grid[T: xr.DataArray | xr.Dataset](
     lon_dim: str = "longitude",
     iterations: int = 1,
 ) -> T:
-    src_lat = source[lat_dim].to_numpy()
+    # build the Resampler on ascending lats — _apply_matrix_da sorts the data the same way
+    src_lat, _ = ensure_ascending_lats(source[lat_dim].to_numpy())
     src_lon = source[lon_dim].to_numpy()
     t_lat, t_lon = target_coords_from_resolution(src_lat, src_lon, target_resolution)
     resampler = Resampler.compute(src_lat, src_lon, t_lat, t_lon, iterations=iterations)

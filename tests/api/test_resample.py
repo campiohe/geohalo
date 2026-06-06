@@ -39,6 +39,18 @@ def test_resample_grid_mean_preserved_constant() -> None:
     np.testing.assert_allclose(out.values, 5.0, atol=1e-9)
 
 
+def test_resample_grid_descending_lats_match_ascending() -> None:
+    # CLAUDE.md convention: a descending grid and its flipped twin give the same results.
+    rng = np.random.default_rng(7)
+    vals = rng.random((4, 5))
+    lats = np.linspace(0.0, 3.0, 4)
+    lons = np.linspace(0.0, 4.0, 5)
+    da = _da(vals, lats, lons)
+    out_asc = resample_grid(da, target_resolution=0.5, iterations=3)
+    out_desc = resample_grid(da.sortby("latitude", ascending=False), target_resolution=0.5, iterations=3)
+    np.testing.assert_allclose(out_desc.sortby("latitude").values, out_asc.values, atol=1e-12)
+
+
 def test_resample_grid_dataset() -> None:
     lats = np.array([0.0, 1.0, 2.0])
     lons = np.array([0.0, 1.0, 2.0])
