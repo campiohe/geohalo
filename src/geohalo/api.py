@@ -1,6 +1,6 @@
 """Public API: reduce(_with_stencil), resample_grid(_with_matrix), aggregate_bias(_with_tree)."""
 
-from collections.abc import Callable, Hashable
+from collections.abc import Callable, Hashable, Mapping
 from typing import Literal
 
 import geopandas as gpd
@@ -10,7 +10,13 @@ import scipy.sparse as sp
 import xarray as xr
 
 from geohalo.bias_tree import BiasTree
-from geohalo.geometry import ensure_ascending_lats, same_grid, target_coords_from_resolution
+from geohalo.geometry import (
+    ensure_ascending_lats,
+    floor_blocks,
+    parent_flat_2d,
+    same_grid,
+    target_coords_from_resolution,
+)
 from geohalo.reduce_operator import ReduceOperator
 from geohalo.resampler import FactoredResampler, Resampler
 from geohalo.stencil import Stencil
@@ -65,6 +71,9 @@ def _apply_matrix_da(
     lon_dim: str,
     out_lat: np.ndarray,
     out_lon: np.ndarray,
+    *,
+    floor: float | None = None,
+    parent_flat: np.ndarray | None = None,
 ) -> xr.DataArray:
     """Apply a (n_target, n_source) sparse matrix over the spatial dims of da."""
     lat_values = da[lat_dim].to_numpy()
@@ -79,6 +88,10 @@ def _apply_matrix_da(
     # shapes we hit, so this is a tidy-default rather than a hot-spot. np.asarray guards
     # against scipy returning an np.matrix.
     out_flat = np.asarray(flat @ matrix.T)
+    if floor is not None and parent_flat is not None:
+        # value-dependent post-step: clip at `floor`, restore each source-cell
+        # block's mean (see geometry.floor_blocks). The matrix stays linear/cached.
+        out_flat = floor_blocks(out_flat, flat, parent_flat, floor)
     out = out_flat.reshape(*arr.shape[:-2], out_lat.size, out_lon.size)
     return xr.DataArray(
         out,
@@ -89,23 +102,62 @@ def _apply_matrix_da(
     )
 
 
+def _floor_by_var(
+    floor: float | Mapping[Hashable, float] | None,
+    ds: xr.Dataset,
+    lat_dim: str,
+    lon_dim: str,
+) -> dict[Hashable, float]:
+    """Resolve `floor` to a per-spatial-var dict; floats apply to every spatial var."""
+    if floor is None:
+        return {}
+    spatial = [n for n, v in ds.data_vars.items() if lat_dim in v.dims and lon_dim in v.dims]
+    if isinstance(floor, Mapping):
+        unknown = set(floor) - set(spatial)
+        if unknown:
+            raise ValueError(
+                f"floor names variables that are not spatial data vars: {sorted(map(str, unknown))}",
+            )
+        return dict(floor)
+    return {n: float(floor) for n in spatial}
+
+
 def resample_grid_with_matrix[T: xr.DataArray | xr.Dataset](
     source: T,
     resampler: Resampler,
     *,
     lat_dim: str = "latitude",
     lon_dim: str = "longitude",
+    floor: float | Mapping[Hashable, float] | None = None,
 ) -> T:
+    """Resample with a prebuilt :class:`Resampler`.
+
+    `floor` clips the output at a lower bound while preserving each source
+    cell's child mean exactly (e.g. ``floor=0.0`` for precipitation). For a
+    Dataset it may be a mapping ``{var_name: floor}`` to bound only the named
+    spatial variables.
+    """
     if isinstance(source, xr.Dataset):
+        floors = _floor_by_var(floor, source, lat_dim, lon_dim)
         return _map_spatial_vars(
             source,
-            lambda da: resample_grid_with_matrix(da, resampler, lat_dim=lat_dim, lon_dim=lon_dim),
+            lambda da: resample_grid_with_matrix(
+                da, resampler, lat_dim=lat_dim, lon_dim=lon_dim, floor=floors.get(da.name),
+            ),
             lat_dim,
             lon_dim,
+        )
+    if isinstance(floor, Mapping):
+        raise TypeError("a floor mapping is Dataset-only; pass a float for DataArray input")
+    parent = None
+    if floor is not None:
+        parent = parent_flat_2d(
+            resampler.source_lat, resampler.source_lon, resampler.target_lat, resampler.target_lon,
         )
     return _apply_matrix_da(
         source, resampler.transform_matrix, lat_dim, lon_dim,
         resampler.target_lat, resampler.target_lon,
+        floor=floor, parent_flat=parent,
     )
 
 
@@ -116,13 +168,21 @@ def resample_grid[T: xr.DataArray | xr.Dataset](
     lat_dim: str = "latitude",
     lon_dim: str = "longitude",
     iterations: int = 1,
+    floor: float | Mapping[Hashable, float] | None = None,
 ) -> T:
+    """Mean-preserving resample onto a `target_resolution` grid.
+
+    `floor` clips the output at a lower bound while preserving each source
+    cell's child mean exactly (e.g. ``floor=0.0`` for precipitation). For a
+    Dataset it may be a mapping ``{var_name: floor}`` to bound only the named
+    spatial variables.
+    """
     # build the Resampler on ascending lats — _apply_matrix_da sorts the data the same way
     src_lat, _ = ensure_ascending_lats(source[lat_dim].to_numpy())
     src_lon = source[lon_dim].to_numpy()
     t_lat, t_lon = target_coords_from_resolution(src_lat, src_lon, target_resolution)
     resampler = Resampler.compute(src_lat, src_lon, t_lat, t_lon, iterations=iterations)
-    return resample_grid_with_matrix(source, resampler, lat_dim=lat_dim, lon_dim=lon_dim)
+    return resample_grid_with_matrix(source, resampler, lat_dim=lat_dim, lon_dim=lon_dim, floor=floor)
 
 
 def reduce_with_operator[T: xr.DataArray | xr.Dataset](
