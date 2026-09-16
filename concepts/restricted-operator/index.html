@@ -626,6 +626,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#bring-your-own-reader" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bring your own reader
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#chunk-layouts-and-coordinates" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1038,6 +1049,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#bring-your-own-reader" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bring your own reader
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#chunk-layouts-and-coordinates" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1136,20 +1158,57 @@ including negative coefficients introduced by resampling.</p>
 <p>Application slices each window with <code>isel</code> <strong>before</strong> accessing values, gathers
 the contributing cells, and multiplies by the compact matrix. Latitude sorting,
 full-grid materialization, and conversion to a full-width CSC matrix are avoided.</p>
+<h2 id="bring-your-own-reader">Bring your own reader<a class="headerlink" href="#bring-your-own-reader" title="Permanent link">&para;</a></h2>
+<p>If your service already reads arrays directly (for example, through Zarr's async
+API), use the same plan without constructing xarray objects or scheduling Dask
+tasks:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">restricted</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">RestrictedOperator</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="n">stored_latitudes</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">)</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="c1"># Each array has shape (..., rows, columns), in restricted.windows order.</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Here values is a NumPy array; an external reader can supply the same windows.</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">arrays</span> <span class="o">=</span> <span class="p">[</span><span class="n">values</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">rows</span><span class="p">,</span> <span class="n">cols</span><span class="p">]</span> <span class="k">for</span> <span class="n">rows</span><span class="p">,</span> <span class="n">cols</span> <span class="ow">in</span> <span class="n">restricted</span><span class="o">.</span><span class="n">windows</span><span class="p">]</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">gathered</span> <span class="o">=</span> <span class="n">restricted</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">arrays</span><span class="p">)</span>       <span class="c1"># (..., contributing_cells)</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">means</span> <span class="o">=</span> <span class="n">restricted</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">gathered</span><span class="p">)</span>        <span class="c1"># (..., zones), in restricted.keys order</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">totals</span> <span class="o">=</span> <span class="n">restricted</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">gathered</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;sum&quot;</span><span class="p">)</span>
+</span></code></pre></div>
+<p><code>gather</code> checks the window count, trailing spatial shapes, and matching leading
+batch shapes. It selects cells in the compact matrix's column order. The result
+keeps the input dtype; mixed window dtypes use NumPy's common dtype. <code>apply</code>
+preserves the existing sparse arithmetic precision and divides by <code>row_sums</code>
+for means, so float32 inputs still normally produce float64 results. Neither
+method changes the input arrays or introduces missing-data renormalization.</p>
+<p>You can read concurrently, provided the resulting arrays retain the plan's
+window order. Alternatively, pass a generator to <code>gather</code> to read and release
+one window at a time:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">gathered</span> <span class="o">=</span> <span class="n">restricted</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">values</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">rows</span><span class="p">,</span> <span class="n">cols</span><span class="p">]</span> <span class="k">for</span> <span class="n">rows</span><span class="p">,</span> <span class="n">cols</span> <span class="ow">in</span> <span class="n">restricted</span><span class="o">.</span><span class="n">windows</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>The NumPy methods do not validate coordinates or storage chunks: your reader is
+responsible for the plan's stored orientation, axis order, and window ordering.
+They are eager, do not perform I/O, and do not manage concurrency. Process large
+batch dimensions in blocks to bound the gathered buffer. The xarray adapter
+uses these same methods and retains its automatic batch/window reading policy.
+Dask and Zarr remain optional; xarray is still a package dependency, but no
+xarray objects are needed for these methods.</p>
+<p>An all-zero operator has no windows. <code>gather([])</code> then returns a float64 vector
+of shape <code>(0,)</code>; <code>apply</code> accepts it for an unbatched result. To retain a batch
+shape or input dtype, call <code>apply(np.empty((*batch_shape, 0), dtype=...))</code>
+directly. Empty batch dimensions are also supported for nonempty plans.</p>
 <h2 id="chunk-layouts-and-coordinates">Chunk layouts and coordinates<a class="headerlink" href="#chunk-layouts-and-coordinates" title="Permanent link">&para;</a></h2>
 <p><code>from_grid</code> inspects the data variable's Dask chunks first, then
 <code>encoding["preferred_chunks"]</code>, then <code>encoding["chunks"]</code>. It reads coordinate
 arrays but does not load grid values. Dask and Zarr are optional: install the
 backend you use; geohalo does not add them as runtime dependencies.</p>
 <p>For a grid without chunk metadata, pass explicit sizes:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Integers mean regular chunks, with a shorter final chunk if necessary.</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">restricted</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">RestrictedOperator</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="n">da</span><span class="o">.</span><span class="n">latitude</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">)</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Tuples specify every chunk length and must sum to the corresponding axis size.</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="c1"># Example for a 721 x 1440 grid:</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">restricted</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">RestrictedOperator</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="n">op</span><span class="p">,</span> <span class="n">da</span><span class="o">.</span><span class="n">latitude</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">164</span><span class="p">,</span> <span class="mi">200</span><span class="p">,</span> <span class="mi">257</span><span class="p">),</span> <span class="p">(</span><span class="mi">64</span><span class="p">,)</span> <span class="o">*</span> <span class="mi">22</span> <span class="o">+</span> <span class="p">(</span><span class="mi">32</span><span class="p">,),</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Integers mean regular chunks, with a shorter final chunk if necessary.</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">restricted</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">RestrictedOperator</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="n">da</span><span class="o">.</span><span class="n">latitude</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">)</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># Tuples specify every chunk length and must sum to the corresponding axis size.</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="c1"># Example for a 721 x 1440 grid:</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">restricted</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">RestrictedOperator</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="n">op</span><span class="p">,</span> <span class="n">da</span><span class="o">.</span><span class="n">latitude</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">164</span><span class="p">,</span> <span class="mi">200</span><span class="p">,</span> <span class="mi">257</span><span class="p">),</span> <span class="p">(</span><span class="mi">64</span><span class="p">,)</span> <span class="o">*</span> <span class="mi">22</span> <span class="o">+</span> <span class="p">(</span><span class="mi">32</span><span class="p">,),</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="p">)</span>
 </span></code></pre></div>
 <p>A plan is specific to the stored latitude orientation, longitude coordinates,
 and spatial chunk boundaries. Application rejects incompatible coordinates or
@@ -1172,7 +1231,7 @@ one slice. Native chunks can exceed this target. Memory also includes the eager
 output, sparse operator, and backend decoding/scheduler allocations; this is not
 a process-memory cap.</p>
 <p>One plan serves every Dataset variable with the same spatial grid and layout:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">out</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce_with_restricted_operator</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">restricted</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">out</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce_with_restricted_operator</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">restricted</span><span class="p">)</span>
 </span></code></pre></div>
 <p>Variables without both spatial dimensions pass through unchanged. Variables can
 have different batch dimensions and batch chunks. For different spatial layouts,
@@ -1180,10 +1239,10 @@ create and apply a separate plan per layout. Use <code>lat_dim</code>, <code>lon
 <code>geom_dim</code> for custom dimension names (<code>from_grid</code> accepts the spatial names too).</p>
 <h2 id="cache-the-plan">Cache the plan<a class="headerlink" href="#cache-the-plan" title="Permanent link">&para;</a></h2>
 <p>Both <code>LocalCache</code> and <code>RedisCache</code> support:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">restricted</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">get_or_compute_restricted_operator</span><span class="p">(</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">op</span><span class="p">,</span> <span class="n">da</span><span class="o">.</span><span class="n">latitude</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">da</span><span class="o">.</span><span class="n">variable</span><span class="o">.</span><span class="n">chunksizes</span><span class="p">[</span><span class="s2">&quot;latitude&quot;</span><span class="p">],</span> <span class="n">da</span><span class="o">.</span><span class="n">variable</span><span class="o">.</span><span class="n">chunksizes</span><span class="p">[</span><span class="s2">&quot;longitude&quot;</span><span class="p">],</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">restricted</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">get_or_compute_restricted_operator</span><span class="p">(</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">op</span><span class="p">,</span> <span class="n">da</span><span class="o">.</span><span class="n">latitude</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">da</span><span class="o">.</span><span class="n">variable</span><span class="o">.</span><span class="n">chunksizes</span><span class="p">[</span><span class="s2">&quot;latitude&quot;</span><span class="p">],</span> <span class="n">da</span><span class="o">.</span><span class="n">variable</span><span class="o">.</span><span class="n">chunksizes</span><span class="p">[</span><span class="s2">&quot;longitude&quot;</span><span class="p">],</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="p">)</span>
 </span></code></pre></div>
 <p>The digest includes the fused operator digest, <strong>stored</strong> coordinates, and
 normalized spatial chunk sizes. Unlike the canonical fused operator, ascending
