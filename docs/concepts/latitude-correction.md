@@ -79,3 +79,74 @@ The correction lives entirely inside the [stencil](stencil.md) build — it is p
 the precompute, so it costs nothing at apply time. The `spherical_correction` flag is
 also mixed into the stencil's [cache digest](../guides/caching.md) (`b"sph"` vs
 `b"flat"`), so a spherical stencil and a planar one never collide in the cache.
+
+## Polygon areas
+
+Use `geohalo.geometry.polygon_areas` to measure zones with the same spherical
+surface element and radius as `cell_areas`:
+
+```python
+from geohalo.geometry import polygon_areas
+from shapely import box
+
+# A GeoSeries or one-dimensional sequence, in longitude/latitude degrees.
+area_m2 = polygon_areas([box(-10, 40, 10, 50)])
+# With a GeoSeries, the output positions follow its order, including duplicate keys:
+# area_m2 = polygon_areas(geoms)
+```
+
+The result is a one-dimensional float64 NumPy array, not an indexed Series.
+`None` produces NaN. Empty geometries, points, and lines have zero area. Polygon
+holes are subtracted regardless of winding direction. MultiPolygon and nested
+GeometryCollection members contribute additively; collections are not unioned
+and overlapping members can therefore be counted more than once. Z is ignored.
+
+### Edge convention and integration
+
+Edges are straight in the supplied longitude/latitude coordinate plane, consistent
+with [Shapely's coordinate model](https://shapely.readthedocs.io/en/stable/manual.html#coordinate-systems).
+They are not great-circle arcs, and this is not an ellipsoidal geodesic area.
+For each ring we use the spherical surface integral as a boundary integral:
+
+\[
+A_{\rm ring} = R^2\left|\oint \sin\varphi\,d\lambda\right|.
+\]
+
+For a linear edge, let \(m=(\varphi_0+\varphi_1)/2\) and
+\(h=(\varphi_1-\varphi_0)/2\). Its integral is
+\(\Delta\lambda\sin(m)\sin(h)/h\), with the ratio defined as 1 when
+\(h=0\). Thus both horizontal and sloping edges are integrated analytically;
+adding collinear vertices does not change the geometric area. The implementation
+subtracts a reference sine and uses a small-angle expansion to reduce floating-point
+cancellation for small or near-pole polygons.
+
+### Longitude and input validation
+
+Longitudes are used as supplied, **without wrapping** or selecting a shorter arc.
+`box(-170, -10, 170, 10)` covers 340 degrees of longitude, not 20. For a narrow
+antimeridian-crossing polygon, unwrap its coordinates (for example, a box from
+170 to 190) or split it into polygons on either side of the seam. Each polygon
+must span at most 360 degrees; a full globe such as `box(-180, -90, 180, 90)`
+has area \(4\pi R^2\). This helper does not alter the longitude handling of
+stencils or reducers.
+
+Coordinates must be finite, latitude must lie in [-90, 90], and geometries must
+be topologically valid. Invalid data raises `ValueError` rather than being repaired
+or clipped. Non-geometry elements raise `TypeError`. A GeoSeries with a declared
+CRS must use EPSG:4326 or an equivalent CRS (such as OGC:CRS84); unlabelled inputs
+are assumed to contain lon/lat degrees. No reprojection is performed. For planar
+area in coordinate units, use `shapely.area` instead.
+
+### Comparing with stencil weights
+
+`polygon_areas(geoms)` and a spherical stencil's `row_sums` are expressed in the
+same m² and use the same radius, but they need not be numerically identical.
+Stencil weights multiply **planar coverage fractions** by whole-cell spherical
+areas. That approximates the spherical area of partially covered cells. A polygon
+made entirely of whole grid cells agrees with their summed areas; a partial-cell
+boundary generally does not, even if the polygon is a lat/lon rectangle.
+
+The stencil also only includes the portion inside its grid footprint. Ratios
+against `polygon_areas` are therefore approximate coverage diagnostics, not an
+exact coverage fraction guaranteed to lie in [0, 1]. This helper leaves existing
+stencil construction and reduction results unchanged.

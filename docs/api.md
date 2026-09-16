@@ -1,7 +1,7 @@
 # API reference
 
-The public surface is everything exported from the top-level `geohalo` package. Each
-entry point comes in a **convenience** form (builds the operator for you) and a
+High-level entry points are exported from the top-level `geohalo` package. Each
+workflow comes in a **convenience** form (builds the operator for you) and a
 **precomputed** form (you pass a cached object).
 
 | Convenience            | Precomputed                  | Builds                                       |
@@ -65,6 +65,18 @@ the array schema, validation, and migration from older caches.
 ::: geohalo.LocalCache
 
 ::: geohalo.RedisCache
+
+---
+
+## Geometry areas
+
+These helpers live in `geohalo.geometry`. See
+[latitude correction](concepts/latitude-correction.md#polygon-areas) for the
+coordinate convention and the distinction between polygon areas and stencil weights.
+
+::: geohalo.geometry.polygon_areas
+
+::: geohalo.geometry.cell_areas
 
 ---
 
