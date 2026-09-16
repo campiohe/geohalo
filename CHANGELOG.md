@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add `RestrictedOperator.gather` and `RestrictedOperator.apply` for reducing
+  NumPy arrays supplied by caller-owned readers
+  ([#17](https://github.com/campiohe/geohalo/issues/17)). Window iterators support
+  one-window-at-a-time gathering; the xarray adapter shares the same array
+  methods. Mean/sum arithmetic, dtype promotion, and NaN propagation are
+  unchanged. No new dependencies or cache-format changes.
+
 ## 1.2.0 — 2026-09-16
 
 - Add `RestrictedOperator`, `reduce_with_restricted_operator`, and local/Redis

@@ -106,6 +106,10 @@ This loads only the contributing spatial chunks and processes batch chunks
 separately. See [chunk-aware reduction](https://campiohe.github.io/geohalo/concepts/restricted-operator/)
 for explicit chunk sizes, caching, and backend limitations.
 
+Already have your own reader? Pass its NumPy window arrays, in plan order, to
+`restricted.gather(arrays)`, then `restricted.apply(gathered, how="mean")`.
+No xarray objects or Dask scheduling are needed for this path.
+
 ## Documentation
 
 Everything is covered in depth at **<https://campiohe.github.io/geohalo/>**:
