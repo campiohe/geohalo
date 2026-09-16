@@ -811,6 +811,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#application-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Application memory
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1051,6 +1062,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#application-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Application memory
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1151,8 +1173,9 @@ the fine grid:</p>
 <h2 id="handling-descending-latitudes">Handling descending latitudes<a class="headerlink" href="#handling-descending-latitudes" title="Permanent link">&para;</a></h2>
 <p>ECMWF and many GRIB products ship latitudes <strong>descending</strong> (90 → −90). geohalo's
 <code>Resampler.compute</code> and <code>FactoredResampler.compute</code> canonicalise source latitudes
-to ascending order when building their matrices. The xarray apply helpers reorder
-descending input data to match, so you do not need to flip anything yourself.
+to ascending order when building their matrices. The xarray apply helpers map
+matrix columns to the input's stored latitude order, so you do not need to flip
+anything yourself or copy a descending grid into ascending order.
 Ascending and descending versions of the same source grid share one cache entry.</p>
 <p><code>resample_grid_with_matrix</code> checks both latitude and longitude coordinates against
 the resampler's source grid and raises <code>ValueError</code> on a mismatch, even when the
@@ -1163,6 +1186,13 @@ resampler was built.</p>
 and longitude in <code>source_lon</code> order. This corrects the convention in 1.1.0, where
 matrices built from descending latitudes expected descending values, causing the
 xarray helpers to flip north and south.</p>
+<h2 id="application-memory">Application memory<a class="headerlink" href="#application-memory" title="Permanent link">&para;</a></h2>
+<p>For large source grids, the xarray helpers apply the transform one batch slice at
+a time. Small contiguous grids use bounded batches. This avoids copying or
+casting every source slice at once while preserving the matrix's arithmetic
+precision. The dense target output still needs to fit in memory, alongside
+temporary storage for one source/target slice and cached matrix indices for
+descending latitudes. Lazy inputs are still loaded in full before application.</p>
 
 
 

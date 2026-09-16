@@ -878,6 +878,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#large-grid-application-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Large-grid application memory
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#the-fusion-win" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1041,6 +1052,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#large-grid-application-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Large-grid application memory
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#the-fusion-win" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1101,13 +1123,13 @@ This page reads the numbers; the <a href="../benchmark/">full generated report</
 </span></code></pre></div>
 <h2 id="the-shape-of-the-cost">The shape of the cost<a class="headerlink" href="#the-shape-of-the-cost" title="Permanent link">&para;</a></h2>
 <p>geohalo deliberately moves all the expensive work into a one-time precompute, leaving a
-hot path that is a single sparse · dense matmul.</p>
+hot path that applies a precomputed sparse matrix to the grid values.</p>
 <pre class="mermaid"><code>flowchart LR
     subgraph once ["once — seconds"]
         S["Stencil / ReduceOperator build&lt;br/&gt;exactextract + sparse assembly"]
     end
     subgraph each ["per grid slice — milliseconds"]
-        M["one matmul&lt;br/&gt;flat @ M.T"]
+        M["sparse products&lt;br/&gt;bounded batches or individual slices"]
     end
     S -.cache.-&gt; M</code></pre>
 <h2 id="precompute-pay-once">Precompute — pay once<a class="headerlink" href="#precompute-pay-once" title="Permanent link">&para;</a></h2>
@@ -1203,9 +1225,53 @@ a 50-member ensemble and <code>step=N</code> is <code>N</code> lead times.</p>
 </tbody>
 </table>
 <p>A batch of 50 grid slices over 5 571 polygons reduces in <strong>single-digit milliseconds</strong>. The
-cost scales with the number of slices (it is one matmul over the flattened batch), and the
+cost scales with the number of slices, and the
 <a href="../concepts/masked/">NaN-aware path</a> costs roughly 2–3× the clean path for its second
 matmul.</p>
+<h2 id="large-grid-application-memory">Large-grid application memory<a class="headerlink" href="#large-grid-application-memory" title="Permanent link">&para;</a></h2>
+<p>The synthetic benchmark for <a href="https://github.com/campiohe/geohalo/issues/5">#5</a>
+runs without external data:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>benchmarks.operator_memory
+</span></code></pre></div>
+<p>It compares the previous sort-and-batch implementation with the current
+application path on a global 0.25° grid: 24 float32 slices (95.05 MiB), 90 polygons,
+and 15,210 matrix coefficients. A local run produced:</p>
+<table>
+<thead>
+<tr>
+<th>Latitude order</th>
+<th style="text-align: right;">Previous extra peak</th>
+<th style="text-align: right;">Current first-call peak</th>
+<th style="text-align: right;">Current warm peak</th>
+<th style="text-align: right;">Previous median</th>
+<th style="text-align: right;">Current median</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Ascending</td>
+<td style="text-align: right;">285.2 MiB</td>
+<td style="text-align: right;">0.540 MiB</td>
+<td style="text-align: right;">0.263 MiB</td>
+<td style="text-align: right;">78.00 ms</td>
+<td style="text-align: right;">3.16 ms</td>
+</tr>
+<tr>
+<td>Descending</td>
+<td style="text-align: right;">475.3 MiB</td>
+<td style="text-align: right;">0.545 MiB</td>
+<td style="text-align: right;">0.326 MiB</td>
+<td style="text-align: right;">134.26 ms</td>
+<td style="text-align: right;">2.56 ms</td>
+</tr>
+</tbody>
+</table>
+<p>Results were identical in this run, retaining float64 arithmetic. Peaks are
+<code>tracemalloc</code> allocations during application, including output and any first-call
+preparation, but excluding the already allocated input and canonical matrix.
+They are not total process RSS. Timings are warmed medians of five calls and vary
+by hardware. The benchmark checks results against the previous product at
+<code>rtol=1e-12</code> and <code>atol=1e-12</code>.</p>
 <h2 id="the-fusion-win">The fusion win<a class="headerlink" href="#the-fusion-win" title="Permanent link">&para;</a></h2>
 <p>For a 0.25° → 0.05° refine (~3.2 M target cells) over 500 polygons, the materialised
 <a href="../concepts/downscaling/">resampler</a> is a 358 MB blob that <strong>cannot build at all</strong> at

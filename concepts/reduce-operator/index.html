@@ -618,6 +618,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#application-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Application memory
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#its-already-your-fast-path" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1019,6 +1030,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#application-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Application memory
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#its-already-your-fast-path" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1106,8 +1128,8 @@ iterations=3. The fused ReduceOperator is 0.40 MB, builds in ~0.5 s, and loads i
 <h2 id="reduceoperator"><code>ReduceOperator</code><a class="headerlink" href="#reduceoperator" title="Permanent link">&para;</a></h2>
 <p><code>ReduceOperator.compute(stencil, source_lat, source_lon, iterations=…)</code> returns the
 stencil's own matrix unchanged when the source grid already matches the stencil grid
-(no resample needed), and otherwise calls <code>fuse_left</code>. Applying it is a single matmul on
-the source grid:</p>
+(no resample needed), and otherwise calls <code>fuse_left</code>. Applying it uses this fused
+matrix directly on the source grid:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">geohalo</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ghl</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">op</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">get_or_compute_reduce_operator</span><span class="p">(</span>
@@ -1122,6 +1144,20 @@ in a fixed normaliser and cannot renormalise per cell. For missing values or
 per-cell weights, use <a href="../masked/"><code>reduce_with_stencil</code></a>, which keeps the resampler
 factored and renormalises each slice.</p>
 </div>
+<h2 id="application-memory">Application memory<a class="headerlink" href="#application-memory" title="Permanent link">&para;</a></h2>
+<p><code>reduce_with_operator</code> reads values in their stored latitude order. For large
+grids, it gathers the source cells referenced by the matrix and applies one
+sparse-vector product per batch slice. The compact column mapping is prepared
+once per operator instance and reused, including across Dataset variables.
+Operators that touch most cells use the full source slice. Small contiguous grids
+use bounded batches to keep multiplication overhead low.</p>
+<p>Temporary dense storage therefore depends on one slice's contributing cells,
+rather than the total number of slices. The original matrix coefficient order
+and float64 precision are preserved, including for float32 input. Canonical
+matrices and disk/Redis cache payloads retain their existing format.</p>
+<p>This bounds the arithmetic's temporary memory; lazy inputs are still loaded in
+full by the xarray entry point. Reading only relevant storage chunks is separate
+work tracked in <a href="https://github.com/campiohe/geohalo/issues/6">#6</a>.</p>
 <h2 id="its-already-your-fast-path">It's already your fast path<a class="headerlink" href="#its-already-your-fast-path" title="Permanent link">&para;</a></h2>
 <p>You rarely call this directly. <code>reduce</code> and <code>reduce_with_stencil</code> use exactly this
 fusion internally for clean data: they build a <code>ReduceOperator</code> once and delegate to
