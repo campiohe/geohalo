@@ -92,6 +92,7 @@ nav:
       - Why exact fractional coverage: concepts/exact-coverage.md
       - Latitude correction: concepts/latitude-correction.md
       - Mean-preserving downscaling: concepts/downscaling.md
+      - Conservative regridding: concepts/conservative.md
       - The fused reduce operator: concepts/reduce-operator.md
       - Chunk-aware reduction: concepts/restricted-operator.md
       - NaN-aware & weighted reduction: concepts/masked.md

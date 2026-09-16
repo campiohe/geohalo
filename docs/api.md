@@ -7,7 +7,7 @@ entry point comes in a **convenience** form (builds the operator for you) and a
 | Convenience            | Precomputed                  | Builds                                       |
 | ---------------------- | ---------------------------- | -------------------------------------------- |
 | `reduce`               | `reduce_with_stencil` / `reduce_with_operator` | [`Stencil`](concepts/stencil.md) / [`ReduceOperator`](concepts/reduce-operator.md) |
-| `resample_grid`        | `resample_grid_with_matrix`  | [`Resampler`](concepts/downscaling.md)       |
+| `resample_grid`        | `resample_grid_with_matrix`  | [`Resampler`](guides/resampling.md)       |
 | `aggregate_bias`       | `aggregate_bias_with_tree`   | [`BiasTree`](concepts/bias-tree.md)          |
 
 ---

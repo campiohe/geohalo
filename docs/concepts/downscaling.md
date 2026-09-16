@@ -1,5 +1,12 @@
 # Mean-preserving downscaling
 
+This is geohalo's default `method="meanpreserving"`, intended for smooth
+refinement. It preserves an **unweighted mean over nearest-parent children**,
+not a spherical-area integral. When coarsening, it is not an area-weighted block
+average; at discontinuities it can overshoot or become negative. Choose
+[`method="conservative"`](conservative.md) for area-overlap averages and
+bounded fields. The two methods intentionally remain separate.
+
 Many polygons are smaller than a single grid cell. [Exact coverage](exact-coverage.md)
 will still answer — it returns the value of the cell the polygon sits in — but that
 answer is flat across the whole cell. geohalo can do better by **refining the grid**

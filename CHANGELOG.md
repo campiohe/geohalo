@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Add `method="conservative"` to `Resampler.compute`, `resample_grid`, and
+  local/Redis resampler caches ([#15](https://github.com/campiohe/geohalo/issues/15)).
+  Two sparse 1-D overlap factors use sin(latitude) and longitude widths, applied
+  per slice without a grid-to-grid Kronecker matrix. Full target-area
+  normalization is the default; `normalization="covered"` and opt-in
+  `skipna=True` support covered/valid-area means. Unmapped cells return NaN.
+  Supports explicit cell bounds, singleton axes with bounds, descending axes,
+  polar clipping, and periodic longitude. Default mean-preserving calls and
+  their existing cache keys/payloads remain compatible; conservative cache
+  payloads store the two factors. Fused polygon reduction is unchanged.
+
 - Add opt-in longitude periodicity with `period=360`
   ([#22](https://github.com/campiohe/geohalo/issues/22)). Linear interpolation
   and nearest-parent assignment wrap together in materialized/factored
