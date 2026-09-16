@@ -43,6 +43,13 @@ surviving denominator can yield an overshoot or a poorly conditioned mean.
 Choose the mask location deliberately; the opt-in does not change `reduce` or
 `reduce_with_stencil`.
 
+All polygon reducers also accept `preserve_dtype=True` to retain each floating
+input variable's result dtype. This does not change where NaNs are masked or
+lower normalization precision; integer means remain floating-point. The
+stencil's masked/weighted path processes floating inputs slice by slice when
+this flag is enabled, avoiding a full-batch float64 result before casting. See
+[dtype controls](reduce-operator.md#coefficient-and-result-dtypes).
+
 ## The masked path
 
 `reduce_with_stencil` picks the path automatically:

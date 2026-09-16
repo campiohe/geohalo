@@ -93,6 +93,14 @@ with the matching cells of the data vector, is the polygon's aggregate.
 total overlap area. That vector is the denominator for `how="mean"`, so the mean hot
 path never re-sums the matrix.
 
+`Stencil.compute(..., dtype=np.float32)` stores coverage coefficients in float32;
+float64 remains the default. Geometry and area calculations run in float64 before
+casting. For float32 matrices, `row_sums` explicitly accumulates the stored weights
+in float64, including after cache reloads. Coordinates remain float64 too.
+Only float32 and float64 coefficient dtypes are supported. For smaller output
+arrays as well, enable `preserve_dtype=True` on the reducer; see
+[coefficient and result dtypes](reduce-operator.md#coefficient-and-result-dtypes).
+
 ## Empty overlaps are errors, not silent zeros
 
 If a polygon does not intersect the grid at all — or its overlap area rounds to zero —

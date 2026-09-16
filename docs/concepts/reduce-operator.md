@@ -89,6 +89,62 @@ Matrix rows, `row_sums`, and output values follow `stencil.keys`, which preserve
 the caller's polygon order. Cache hits return that same requested order even
 when another caller populated the entry in a different order.
 
+### Coefficient and result dtypes
+
+Storage precision and result dtype are independent, opt-in choices:
+
+```python
+import numpy as np
+
+stencil = cache.get_or_compute_stencil(
+    target_lat, target_lon, geoms, dtype=np.float32,
+)
+op = cache.get_or_compute_reduce_operator(
+    stencil, da.latitude.to_numpy(), da.longitude.to_numpy(), dtype=np.float32,
+)
+out = ghl.reduce_with_operator(da, op, preserve_dtype=True)
+# For a float32 da: op.matrix.dtype == out.dtype == np.dtype("float32")
+# op.row_sums.dtype remains float64.
+```
+
+Both builders default to `dtype=np.float64` and accept float32 or float64 (also
+as NumPy dtype objects or equivalent strings). Request float32 on each builder
+whose coefficients you want stored in float32; `ReduceOperator.compute` defaults
+to float64 even for a float32 stencil. A `RestrictedOperator` inherits its fused
+operator's dtype. Coordinate and normalizer arrays stay float64. Stencil row sums
+accumulate the **stored** coefficients in float64; fused operators retain those
+normalizers rather than summing their potentially signed coefficients.
+
+Float32 halves the coefficient buffer, not the entire CSR object: index arrays
+are unchanged. Geometry extraction and fusion still use float64 work arrays
+before casting, so build-time peak memory is not halved. Casting does not reorder
+or merge sparse entries. Coefficient dtype is included in cache keys; float64
+entries remain compatible with existing caches.
+
+`preserve_dtype=False` keeps the previous NumPy promotion rules. With a float32
+matrix and float32 values, sums are float32, but means normally become float64
+because normalizers are float64. `preserve_dtype=True` returns floating-point
+inputs in their own dtype, including means and `skipna=True` results. It does
+**not** downcast a float64 matrix or change accumulation/normalization precision.
+Integer and boolean inputs retain normal promotion, so means are floating-point,
+not truncated integers. Dataset variables are handled independently; non-spatial
+variables pass through unchanged.
+
+The flag is supported by `reduce`, `reduce_with_stencil`, both prebuilt xarray
+reducers, `ReduceOperator.apply_grid`, and `RestrictedOperator.apply`. Results
+are allocated in the chosen dtype; projection temporaries stay bounded by a
+slice or small block rather than a full float64 result batch. The stencil's
+masked/weighted path processes floating inputs one slice at a time when enabled.
+`preserve_dtype` is apply-time only and does not require another cached operator.
+
+Float32 coefficients or results lose precision and range. Representative tests
+agree with float64 within `1e-5` relative error, but this is **not a universal
+bound**: signed cancellation, small surviving denominators, and extreme values
+can amplify errors or overflow. Keep float64 when those risks matter. Returning
+float64 results from float32 coefficients cannot recover discarded coefficient
+precision. `reduce` still builds float64 coefficients; prebuild a stencil/operator
+to opt into float32 storage.
+
 ### Opt-in source-cell NaN handling
 
 Contributing NaNs propagate by default, preserving existing behavior. Pass
@@ -135,7 +191,7 @@ option does not change operator digests or require rebuilding caches.
 
 Temporary dense storage therefore depends on one slice's contributing cells,
 rather than the total number of slices. The original matrix coefficient order
-and float64 precision are preserved, including for float32 input. Canonical
+and chosen matrix precision are preserved (float64 by default), including for float32 input. Canonical
 matrices and disk/Redis cache payloads retain their existing format.
 
 This bounds the arithmetic's temporary memory; lazy inputs are still loaded in

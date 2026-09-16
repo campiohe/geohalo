@@ -181,6 +181,7 @@ class RestrictedOperator:
 
     def apply(
         self, gathered: np.ndarray, *, how: Literal["mean", "sum"] = "mean", skipna: bool = False,
+        preserve_dtype: bool = False,
     ) -> np.ndarray:
         """Reduce ``(..., contributing_cells)`` to ``(..., zones)`` in ``keys`` order.
 
@@ -188,6 +189,8 @@ class RestrictedOperator:
         returns the sparse projection; mean additionally divides by ``row_sums``.
         Matrix precision and coefficient accumulation order are preserved, with
         per-batch-slice products to avoid upcasting or copying an entire batch.
+        ``preserve_dtype=True`` stores results in a floating input's dtype;
+        integer inputs keep normal promotion, including floating-point means.
 
         By default, contributing NaNs propagate. ``skipna=True`` omits missing
         source cells: sums return the remaining weighted contributions (zero if
@@ -203,10 +206,12 @@ class RestrictedOperator:
             raise ValueError(f"expected trailing cell dimension {self.matrix.shape[1]}, got {gathered.shape}")
         batch_shape = gathered.shape[:-1]
         row_sums = self.row_sums if how == "mean" else None
-        dtype = projection_dtype(gathered.dtype, self.matrix.dtype, row_sums)
+        dtype = projection_dtype(gathered.dtype, self.matrix.dtype, row_sums, preserve_dtype=preserve_dtype)
         out = np.empty((*batch_shape, self.matrix.shape[0]), dtype=dtype)
         for index in np.ndindex(batch_shape):
-            out[index] = project_values(self.matrix, gathered[index], row_sums=row_sums, skipna=skipna)
+            out[index] = project_values(
+                self.matrix, gathered[index], row_sums=row_sums, skipna=skipna, preserve_dtype=preserve_dtype,
+            )
         return out
 
     @classmethod
@@ -217,7 +222,7 @@ class RestrictedOperator:
         lat_chunks: ChunkSizes,
         lon_chunks: ChunkSizes,
     ) -> "RestrictedOperator":
-        """Build from stored latitudes and explicit chunk sizes (regular or irregular)."""
+        """Build from stored latitudes and chunks, inheriting the operator's dtype."""
         lat, lat_chunks, lon_chunks = _restriction_inputs(operator, source_lat, lat_chunks, lon_chunks)
         matrix = operator.matrix.copy()
         matrix.eliminate_zeros()

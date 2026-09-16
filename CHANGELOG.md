@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Add opt-in `dtype=np.float32` to `Stencil.compute`, `ReduceOperator.compute`,
+  and their LocalCache/RedisCache methods, plus `preserve_dtype=True` on all
+  polygon reducers, `ReduceOperator.apply_grid`, and `RestrictedOperator.apply`
+  ([#19](https://github.com/campiohe/geohalo/issues/19)). Float32 coefficients
+  reduce storage while row normalizers remain float64. Floating-point results
+  can retain each input variable's dtype; integer means remain floating-point.
+  Existing float64 defaults, cache keys/payload formats, and NaN semantics are
+  unchanged. Float32 operators use separate cache keys; restricted plans inherit
+  coefficient dtype. Reduced precision is opt-in, not an accuracy guarantee.
+
 - Preserve the caller's polygon order in `Stencil.compute`, reduction matrix
   rows, and NumPy/xarray reduction outputs
   ([#18](https://github.com/campiohe/geohalo/issues/18)). Local and Redis caches

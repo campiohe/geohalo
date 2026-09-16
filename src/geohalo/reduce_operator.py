@@ -20,8 +20,9 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
+from numpy.typing import DTypeLike
 
-from geohalo._sparse import GridMatrix
+from geohalo._sparse import GridMatrix, cast_matrix, operator_dtype
 from geohalo.geometry import ensure_ascending_lats, grid_digest, same_grid
 from geohalo.resampler import FactoredResampler
 from geohalo.stencil import Stencil
@@ -32,17 +33,23 @@ def reduce_operator_digest(
     source_lat: np.ndarray,
     source_lon: np.ndarray,
     iterations: int,
+    *,
+    dtype: DTypeLike = np.float64,
 ) -> bytes:
     """Cache key for a fused operator, derivable from inputs without building it.
 
     Canonicalises the source latitudes to ascending so a descending grid and its
     flipped twin hash identically (the resampler treats them the same).
+    Coefficient dtype distinguishes entries; float64 retains existing keys.
     """
     src_lat_asc, _ = ensure_ascending_lats(source_lat)
     h = hashlib.sha256()
     h.update(stencil_digest)
     h.update(grid_digest(src_lat_asc, source_lon))
     h.update(str(iterations).encode())
+    dtype = operator_dtype(dtype)
+    if dtype != np.float64:
+        h.update(b"dtype:" + dtype.name.encode())
     return h.digest()
 
 
@@ -63,6 +70,7 @@ class ReduceOperator:
     def apply_grid(
         self, values: np.ndarray, *, descending: bool = False,
         how: Literal["mean", "sum"] = "sum", skipna: bool = False,
+        preserve_dtype: bool = False,
     ) -> np.ndarray:
         """Project (..., latitude, longitude) values; default to an unnormalized sum.
 
@@ -73,11 +81,16 @@ class ReduceOperator:
         ``how="mean"`` divides by ``row_sums``. With ``skipna=True``, sums omit
         missing source cells and means divide by the surviving signed weight
         (NaN if nonpositive). This is source-cell masking, not resample-then-mask.
+
+        ``preserve_dtype=True`` returns floating inputs in their own dtype.
+        Multiplication and normalization keep their existing precision; integer
+        inputs retain normal promotion, so means are never truncated to integers.
         """
         if how not in ("mean", "sum"):
             raise ValueError(f"how must be 'mean' or 'sum', got {how!r}")
         return self._grid_matrix.apply(
-            values, descending=descending, row_sums=self.row_sums if how == "mean" else None, skipna=skipna,
+            values, descending=descending, row_sums=self.row_sums if how == "mean" else None,
+            skipna=skipna, preserve_dtype=preserve_dtype,
         )
 
     def __repr__(self) -> str:
@@ -94,7 +107,15 @@ class ReduceOperator:
         source_lon: np.ndarray,
         *,
         iterations: int = 1,
+        dtype: DTypeLike = np.float64,
     ) -> "ReduceOperator":
+        """Fuse with float64 (default) or float32 stored coefficients.
+
+        Fusion uses the existing float64 resampling math before casting. The
+        stencil's float64 row sums are retained; casting does not sort entries.
+        Request float32 explicitly even if the stencil already uses float32.
+        """
+        dtype = operator_dtype(dtype)
         src_lat_asc, _ = ensure_ascending_lats(source_lat)
         src_lon = np.asarray(source_lon, dtype=np.float64)
         occ = stencil.occupancy_matrix
@@ -107,9 +128,9 @@ class ReduceOperator:
             )
             matrix = resampler.fuse_left(occ)
 
-        digest = reduce_operator_digest(stencil.digest, src_lat_asc, src_lon, iterations)
+        digest = reduce_operator_digest(stencil.digest, src_lat_asc, src_lon, iterations, dtype=dtype)
         return cls(
-            matrix=matrix,
+            matrix=cast_matrix(matrix, dtype),
             row_sums=np.asarray(stencil.row_sums, dtype=np.float64),
             keys=stencil.keys,
             source_lat=src_lat_asc,

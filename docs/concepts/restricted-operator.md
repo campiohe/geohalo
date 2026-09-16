@@ -68,6 +68,14 @@ for means, so float32 inputs still normally produce float64 results. Neither
 method changes the input arrays. Missing-data renormalization is opt-in via
 `restricted.apply(gathered, skipna=True)`.
 
+Build the fused operator with `dtype=np.float32` to get float32 coefficients in
+the restricted plan too. To retain floating input dtype in the result, call
+`restricted.apply(gathered, preserve_dtype=True)` or use the same flag on
+`reduce_with_restricted_operator`. It composes with `skipna=True` and `how="sum"`.
+Integer inputs retain normal promotion, including floating-point means. The
+flag controls result storage, not matrix or normalization precision; float64
+normalizers are retained. See [dtype controls](reduce-operator.md#coefficient-and-result-dtypes).
+
 You can read concurrently, provided the resulting arrays retain the plan's
 window order. Alternatively, pass a generator to `gather` to read and release
 one window at a time:
