@@ -116,6 +116,19 @@ source cells and renormalize means. NaNs still propagate by default. When
 resampling is fused, source-cell masking differs from the stencil path's
 resample-then-mask behavior; see [NaN handling](https://campiohe.github.io/geohalo/concepts/masked/).
 
+For float32 grids, opt into smaller coefficients and results independently:
+
+```python
+stencil = ghl.Stencil.compute(lats, lons, geoms, dtype=np.float32)
+op = ghl.ReduceOperator.compute(stencil, lats, lons, dtype=np.float32)
+out = ghl.reduce_with_operator(da.astype(np.float32), op, preserve_dtype=True)
+```
+
+Builders default to float64. All polygon reducers and the operator's NumPy
+methods accept `preserve_dtype=True`; floating inputs retain their result dtype,
+while integer means remain floating-point. Normalizers stay float64, and matrix
+precision is not lowered at apply time. See [dtype controls](https://campiohe.github.io/geohalo/concepts/reduce-operator/#coefficient-and-result-dtypes).
+
 ## Documentation
 
 Everything is covered in depth at **<https://campiohe.github.io/geohalo/>**:
