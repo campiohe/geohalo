@@ -2,7 +2,9 @@
 
 import hashlib
 import numbers
+from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -127,6 +129,77 @@ class RestrictedOperator:
     lat_chunks: tuple[int, ...]
     lon_chunks: tuple[int, ...]
     digest: bytes
+
+    def gather(self, arrays: Iterable[np.ndarray]) -> np.ndarray:
+        """Gather already-read windows into ``(..., contributing_cells)``.
+
+        Supply exactly one NumPy array per entry in ``windows``, in that order.
+        Each array must have trailing ``(rows, columns)`` dimensions matching its
+        window and the same leading batch shape. Coordinates cannot be checked:
+        the caller is responsible for reading in the plan's stored grid order.
+
+        Iterators are consumed one window at a time, without retaining earlier
+        arrays or flattening whole noncontiguous windows. A common input dtype
+        is preserved; mixed dtypes are promoted with ``numpy.result_type``.
+        No I/O, xarray objects, or Dask scheduling is involved.
+
+        With no windows, ``gather([])`` returns an empty float64 vector. For a
+        batched empty plan, pass ``np.empty((*batch_shape, 0), dtype=...)``
+        directly to ``apply`` instead.
+        """
+        iterator = iter(arrays)
+        gathered = None
+        offset = 0
+        for i, ((rows, cols), positions) in enumerate(zip(self.windows, self.gathers, strict=True)):
+            try:
+                values = np.asarray(next(iterator))
+            except StopIteration as exc:
+                raise ValueError(f"expected {len(self.windows)} window arrays, got {i}") from exc
+            spatial_shape = (rows.stop - rows.start, cols.stop - cols.start)
+            if values.ndim < 2 or values.shape[-2:] != spatial_shape:
+                raise ValueError(f"window {i} expected trailing shape {spatial_shape}, got {values.shape}")
+            if gathered is None:
+                gathered = np.empty((*values.shape[:-2], self.matrix.shape[1]), dtype=values.dtype)
+            elif values.shape[:-2] != gathered.shape[:-1]:
+                raise ValueError(
+                    f"window {i} expected batch shape {gathered.shape[:-1]}, got {values.shape[:-2]}",
+                )
+            dtype = np.result_type(gathered.dtype, values.dtype)
+            if dtype != gathered.dtype:
+                promoted = np.empty(gathered.shape, dtype=dtype)
+                promoted[..., :offset] = gathered[..., :offset]
+                gathered = promoted
+            r, c = np.divmod(positions, spatial_shape[1])
+            gathered[..., offset:offset + positions.size] = values[..., r, c]
+            offset += positions.size
+            del values
+        sentinel = object()
+        if next(iterator, sentinel) is not sentinel:
+            raise ValueError(f"expected {len(self.windows)} window arrays, got more")
+        return np.empty(0, dtype=np.float64) if gathered is None else gathered
+
+    def apply(self, gathered: np.ndarray, *, how: Literal["mean", "sum"] = "mean") -> np.ndarray:
+        """Reduce ``(..., contributing_cells)`` to ``(..., zones)`` in ``keys`` order.
+
+        ``gathered`` must be in the column order produced by ``gather``. Sum
+        returns the sparse projection; mean additionally divides by ``row_sums``.
+        Matrix precision and coefficient accumulation order are preserved, with
+        per-batch-slice products to avoid upcasting or copying an entire batch.
+
+        Like ``reduce_with_operator``, this assumes clean, unweighted values:
+        contributing NaNs propagate; missing cells are not renormalized. This
+        method does not read data or require xarray objects or Dask.
+        """
+        if how not in ("mean", "sum"):
+            raise ValueError(f"how must be 'mean' or 'sum', got {how!r}")
+        gathered = np.asarray(gathered)
+        if gathered.ndim < 1 or gathered.shape[-1] != self.matrix.shape[1]:
+            raise ValueError(f"expected trailing cell dimension {self.matrix.shape[1]}, got {gathered.shape}")
+        batch_shape = gathered.shape[:-1]
+        out = np.empty((*batch_shape, self.matrix.shape[0]), dtype=np.result_type(gathered.dtype, self.matrix.dtype))
+        for index in np.ndindex(batch_shape):
+            out[index] = self.matrix @ gathered[index]
+        return out / self.row_sums if how == "mean" else out
 
     @classmethod
     def compute(

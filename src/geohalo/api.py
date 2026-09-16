@@ -251,23 +251,18 @@ def reduce_with_restricted_operator[T: xr.DataArray | xr.Dataset](
     dtype = np.result_type(grid.dtype, operator.matrix.dtype)
     out = np.zeros((*batch_shape, len(operator.keys)), dtype=dtype)
     if operator.matrix.shape[1]:
+        def read_windows(selection: dict[str, slice]) -> Iterator[np.ndarray]:
+            for rows, cols in operator.windows:
+                # Slice BEFORE accessing values: backend arrays and Dask cull
+                # unrelated chunks. Do not retain the previous window.
+                window = grid.isel({**selection, lat_dim: rows, lon_dim: cols})
+                yield window.transpose(*batch_dims, lat_dim, lon_dim).to_numpy()
+                del window
+
         for index in _restricted_batch_slices(grid, batch_dims, operator):
             selection = dict(zip(batch_dims, index, strict=True))
-            shape = tuple(part.stop - part.start for part in index)
-            gathered = np.empty((*shape, operator.matrix.shape[1]), dtype=grid.dtype)
-            offset = 0
-            for (rows, cols), positions in zip(operator.windows, operator.gathers, strict=True):
-                # Slice BEFORE accessing values: backend arrays and Dask cull all
-                # unrelated chunks. Transposing the full backend array can load it.
-                window = grid.isel({**selection, lat_dim: rows, lon_dim: cols})
-                values = window.transpose(*batch_dims, lat_dim, lon_dim).to_numpy()
-                r, c = np.divmod(positions, cols.stop - cols.start)
-                gathered[..., offset:offset + len(positions)] = values[..., r, c]
-                offset += len(positions)
-                del values, window
-            result = out[index]
-            for batch in np.ndindex(shape):
-                result[batch] = operator.matrix @ gathered[batch]
+            gathered = operator.gather(read_windows(selection))
+            out[index] = operator.apply(gathered, how="sum")
             del gathered
     if how == "mean":
         out = out / operator.row_sums

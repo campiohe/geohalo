@@ -40,6 +40,53 @@ Application slices each window with `isel` **before** accessing values, gathers
 the contributing cells, and multiplies by the compact matrix. Latitude sorting,
 full-grid materialization, and conversion to a full-width CSC matrix are avoided.
 
+## Bring your own reader
+
+If your service already reads arrays directly (for example, through Zarr's async
+API), use the same plan without constructing xarray objects or scheduling Dask
+tasks:
+
+```python
+restricted = ghl.RestrictedOperator.compute(op, stored_latitudes, 64, 64)
+
+# Each array has shape (..., rows, columns), in restricted.windows order.
+# Here values is a NumPy array; an external reader can supply the same windows.
+arrays = [values[..., rows, cols] for rows, cols in restricted.windows]
+gathered = restricted.gather(arrays)       # (..., contributing_cells)
+means = restricted.apply(gathered)        # (..., zones), in restricted.keys order
+totals = restricted.apply(gathered, how="sum")
+```
+
+`gather` checks the window count, trailing spatial shapes, and matching leading
+batch shapes. It selects cells in the compact matrix's column order. The result
+keeps the input dtype; mixed window dtypes use NumPy's common dtype. `apply`
+preserves the existing sparse arithmetic precision and divides by `row_sums`
+for means, so float32 inputs still normally produce float64 results. Neither
+method changes the input arrays or introduces missing-data renormalization.
+
+You can read concurrently, provided the resulting arrays retain the plan's
+window order. Alternatively, pass a generator to `gather` to read and release
+one window at a time:
+
+```python
+gathered = restricted.gather(
+    values[..., rows, cols] for rows, cols in restricted.windows
+)
+```
+
+The NumPy methods do not validate coordinates or storage chunks: your reader is
+responsible for the plan's stored orientation, axis order, and window ordering.
+They are eager, do not perform I/O, and do not manage concurrency. Process large
+batch dimensions in blocks to bound the gathered buffer. The xarray adapter
+uses these same methods and retains its automatic batch/window reading policy.
+Dask and Zarr remain optional; xarray is still a package dependency, but no
+xarray objects are needed for these methods.
+
+An all-zero operator has no windows. `gather([])` then returns a float64 vector
+of shape `(0,)`; `apply` accepts it for an unbatched result. To retain a batch
+shape or input dtype, call `apply(np.empty((*batch_shape, 0), dtype=...))`
+directly. Empty batch dimensions are also supported for nonempty plans.
+
 ## Chunk layouts and coordinates
 
 `from_grid` inspects the data variable's Dask chunks first, then
