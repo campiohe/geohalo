@@ -864,6 +864,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Precompute — pay once">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#detailed-polygons-wkb-versus-geojson" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Detailed polygons: WKB versus GeoJSON
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1038,6 +1055,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Precompute — pay once">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#detailed-polygons-wkb-versus-geojson" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Detailed polygons: WKB versus GeoJSON
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1164,6 +1198,39 @@ complexity; the resulting matrix is small and cacheable.</p>
 <p>After the first build, a <a href="../guides/caching/">cache</a> hit loads in milliseconds — a
 ~30–46× speedup for stencils, and <strong>thousands of times</strong> for a refined
 <a href="../concepts/reduce-operator/"><code>ReduceOperator</code></a>.</p>
+<h3 id="detailed-polygons-wkb-versus-geojson">Detailed polygons: WKB versus GeoJSON<a class="headerlink" href="#detailed-polygons-wkb-versus-geojson" title="Permanent link">&para;</a></h3>
+<p>The synthetic benchmark for <a href="https://github.com/campiohe/geohalo/issues/7">#7</a>
+isolates stencil construction with detailed boundaries:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>benchmarks.stencil_build
+</span></code></pre></div>
+<p>On 3,000 synthetic polygons with 6,003,000 vertices and a global 0.25° grid, a
+local run measured these medians over three complete builds:</p>
+<table>
+<thead>
+<tr>
+<th>Geometry input</th>
+<th style="text-align: right;">Build time</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Previous GeoJSON path</td>
+<td style="text-align: right;">15.731 s</td>
+</tr>
+<tr>
+<td>Current WKB path</td>
+<td style="text-align: right;">1.079 s</td>
+</tr>
+</tbody>
+</table>
+<p>This was a <strong>14.6× speedup</strong>, with identical CSR matrices, row sums, polygon keys,
+and cache digests. Both paths include sorting, geometry serialization,
+exactextract coverage, sparse assembly, and hashing; polygon generation is
+excluded. The WKB path also reuses its encoded geometries for the digest.</p>
+<p>Environment: Python 3.14.4, exactextract 0.3.0, Shapely 2.1.2, NumPy 2.4.6,
+SciPy 1.17.1, and GeoPandas 1.1.3. Timings depend on hardware and polygon
+complexity; the earlier GADM table uses different polygons and is a separate
+historical measurement.</p>
 <h2 id="hot-path-pay-per-slice">Hot path — pay per slice<a class="headerlink" href="#hot-path-pay-per-slice" title="Permanent link">&para;</a></h2>
 <p>All rows below aggregate to GADM Brazil L2 (~5570 municipalities) on a 0.25° grid over
 Brazil (160×160 = 25 600 cells). The batch dims are arbitrary — any stacked non-spatial
@@ -1231,7 +1298,7 @@ matmul.</p>
 <h2 id="large-grid-application-memory">Large-grid application memory<a class="headerlink" href="#large-grid-application-memory" title="Permanent link">&para;</a></h2>
 <p>The synthetic benchmark for <a href="https://github.com/campiohe/geohalo/issues/5">#5</a>
 runs without external data:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>benchmarks.operator_memory
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>benchmarks.operator_memory
 </span></code></pre></div>
 <p>It compares the previous sort-and-batch implementation with the current
 application path on a global 0.25° grid: 24 float32 slices (95.05 MiB), 90 polygons,

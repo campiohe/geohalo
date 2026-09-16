@@ -1093,12 +1093,17 @@ matrix and just enough metadata to apply and validate it.</p>
 </li>
 <li>
 <p><strong>Sort the polygons by key.</strong> <code>repr(key)</code> ordering makes the build (and its
-   <a href="../../guides/caching/">digest</a>) independent of the order you passed geometries in.</p>
+   <a href="../../guides/caching/">digest</a>) independent of the order you passed geometries in.
+   Encode the sorted geometries with one vectorised
+   <a href="https://shapely.readthedocs.io/en/stable/reference/shapely.to_wkb.html"><code>shapely.to_wkb</code></a>
+   call. The resulting binary geometry bytes serve both extraction and hashing.</p>
 </li>
 <li>
 <p><strong>Exact coverage.</strong> A <code>NumPyRasterSource</code> describes the grid's bounding box;
    <a href="https://github.com/isciences/exactextract"><code>exact_extract</code></a> returns, for each
    polygon, the list of <code>cell_id</code>s it touches and the fraction of each cell covered.
+   A WKB feature source passes the binary geometries directly to exactextract,
+   avoiding Python coordinate lists and GeoJSON encoding/parsing.
    This is the unbiased boundary treatment — see
    <a href="../exact-coverage/">why exact fractional coverage</a>.</p>
 </li>
@@ -1152,6 +1157,13 @@ their vertex count, since <code>exactextract</code> clips every polygon against 
 resulting CSR matrix, by contrast, is tiny (kilobytes to a few megabytes) and is what
 you <a href="../../guides/caching/">cache</a>. See the
 <a href="../../performance/"><code>Stencil.compute</code> rows</a> in the benchmarks.</p>
+<p>Detailed boundaries benefit especially from the WKB input path. Reproduce the
+comparison against the previous GeoJSON implementation without downloading data:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>benchmarks.stencil_build
+</span></code></pre></div>
+<p>Both paths include geometry serialization, coverage extraction, CSR assembly,
+and hashing. The benchmark verifies that matrix entries, row sums, polygon keys,
+and digests match exactly.</p>
 <table>
 <thead>
 <tr>
