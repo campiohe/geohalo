@@ -1,4 +1,4 @@
-"""Resampler: value-independent grid->grid transform matrix."""
+"""Resampler: value-independent materialized or separable grid transforms."""
 
 import hashlib
 from dataclasses import dataclass
@@ -7,8 +7,22 @@ from functools import cached_property
 import numpy as np
 import scipy.sparse as sp
 
+from geohalo._conservative import (
+    ConservativeGrid,
+    GridBounds,
+    Normalization,
+    ResampleMethod,
+    canonical_bounds,
+    validate_method,
+)
 from geohalo._sparse import GridMatrix
-from geohalo.geometry import _validate_period, bilinear_matrix_1d, ensure_ascending_lats, nearest_index
+from geohalo.geometry import (
+    _validate_period,
+    bilinear_matrix_1d,
+    conservative_matrix_1d,
+    ensure_ascending_lats,
+    nearest_index,
+)
 
 
 @dataclass(frozen=True)
@@ -18,32 +32,65 @@ class Resampler:
     Target rows retain the supplied coordinate order. Direct matrix callers must
     flatten source values in ``(source_lat, source_lon)`` order; the xarray API
     handles descending source latitudes automatically.
+
+    The default mean-preserving method stores ``transform_matrix``. Conservative
+    resampling instead stores ``axis_weights=(latitude, longitude)`` and leaves
+    ``transform_matrix=None``; use ``apply_grid`` for either representation.
     """
 
-    transform_matrix: sp.csr_matrix
+    transform_matrix: sp.csr_matrix | None
     source_lat: np.ndarray
     source_lon: np.ndarray
     target_lat: np.ndarray
     target_lon: np.ndarray
     digest: bytes
+    axis_weights: tuple[sp.csr_matrix, sp.csr_matrix] | None = None
+    normalization: Normalization = "destination"
+
+    @property
+    def method(self) -> ResampleMethod:
+        return "conservative" if self.axis_weights is not None else "meanpreserving"
+
+    @cached_property
+    def _conservative_grid(self) -> ConservativeGrid:
+        if self.axis_weights is None:
+            raise ValueError("area coverage is only available for conservative resamplers")
+        return ConservativeGrid(*self.axis_weights, self.normalization)
+
+    @property
+    def coverage(self) -> np.ndarray:
+        """Source-covered fraction of each target cell (conservative only)."""
+        return self._conservative_grid.coverage
 
     @cached_property
     def _grid_matrix(self) -> GridMatrix:
         return GridMatrix(self.transform_matrix, (self.source_lat.size, self.source_lon.size))
 
-    def apply_grid(self, values: np.ndarray, *, descending: bool = False) -> np.ndarray:
+    def apply_grid(self, values: np.ndarray, *, descending: bool = False, skipna: bool = False) -> np.ndarray:
         """Transform (..., latitude, longitude) values into (..., n_target).
 
         ``descending=True`` interprets source rows in descending latitude order.
         Temporary dense allocations are bounded per slice or small batch block.
+        Conservative resamplers use two 1-D contractions per slice. Uncovered
+        cells return NaN. For this method only, ``skipna=True`` renormalizes over
+        valid covered area, overriding destination-area normalization; all
+        missing cells return NaN. The default propagates contributing NaNs.
         """
+        if self.axis_weights is not None:
+            return self._conservative_grid.apply(values, descending=descending, skipna=skipna)
+        if skipna:
+            raise ValueError("resampling skipna=True requires method='conservative'")
         return self._grid_matrix.apply(values, descending=descending)
 
     def __repr__(self) -> str:
+        storage = (
+            f"method='conservative', axis_nnz={sum(axis.nnz for axis in self.axis_weights)}"
+            if self.axis_weights is not None else f"nnz={self.transform_matrix.nnz}"
+        )
         return (
             f"Resampler(source=({self.source_lat.size}, {self.source_lon.size}), "
             f"target=({self.target_lat.size}, {self.target_lon.size}), "
-            f"nnz={self.transform_matrix.nnz})"
+            f"{storage})"
         )
 
     @classmethod
@@ -56,22 +103,59 @@ class Resampler:
         *,
         iterations: int = 1,
         period: float | None = None,
+        method: ResampleMethod = "meanpreserving",
+        normalization: Normalization = "destination",
+        source_bounds: GridBounds | None = None,
+        target_bounds: GridBounds | None = None,
     ) -> "Resampler":
-        """Build a mean-preserving transform; ``period`` wraps longitude only.
+        """Build a mean-preserving or separable conservative grid transform.
 
         The default clamps both axes. Set ``period=360`` for cyclic longitude,
         with no repeated source endpoint. Explicit target coordinates retain
         their values and order, including targets outside the source cycle.
+
+        ``method='conservative'`` averages spherical cell overlaps using two
+        1-D ``axis_weights``; ``transform_matrix`` is None. ``normalization`` is
+        'destination' (full target area) or 'covered' (source-covered area).
+        Optional ``source_bounds``/``target_bounds`` are (latitude, longitude)
+        edge arrays, each one longer than its coordinate axis, in that axis's
+        order. Otherwise midpoint edges are inferred (latitude clipped at the
+        poles, cyclic source longitude when periodic). Singleton noncyclic axes
+        require bounds. Conservative axes must be strictly monotonic, and
+        ``iterations`` must remain 1. Geometries and existing reducers are not
+        changed by this grid-resampling option.
         """
+        validate_method(method, iterations, normalization, source_bounds, target_bounds)
         if iterations < 1:
             raise ValueError(f"iterations must be >= 1, got {iterations}")
-        source_lat, _ = ensure_ascending_lats(source_lat)
+        source_lat, descending = ensure_ascending_lats(source_lat)
+        source_bounds = canonical_bounds(source_bounds, descending_lat=descending)
+        target_bounds = canonical_bounds(target_bounds)
         source_lon = np.asarray(source_lon, dtype=np.float64)
         target_lat = np.asarray(target_lat, dtype=np.float64)
         target_lon = np.asarray(target_lon, dtype=np.float64)
 
-        transform = _build_transform(source_lat, source_lon, target_lat, target_lon, iterations, period=period)
-        digest = resampler_digest(source_lat, source_lon, target_lat, target_lon, iterations, period=period)
+        axis_weights = None
+        if method == "conservative":
+            axis_weights = (
+                conservative_matrix_1d(
+                    source_lat, target_lat, latitude=True,
+                    source_bounds=None if source_bounds is None else source_bounds[0],
+                    target_bounds=None if target_bounds is None else target_bounds[0],
+                ),
+                conservative_matrix_1d(
+                    source_lon, target_lon, period=period,
+                    source_bounds=None if source_bounds is None else source_bounds[1],
+                    target_bounds=None if target_bounds is None else target_bounds[1],
+                ),
+            )
+            transform = None
+        else:
+            transform = _build_transform(source_lat, source_lon, target_lat, target_lon, iterations, period=period)
+        digest = resampler_digest(
+            source_lat, source_lon, target_lat, target_lon, iterations, period=period,
+            method=method, normalization=normalization, source_bounds=source_bounds, target_bounds=target_bounds,
+        )
         return cls(
             transform_matrix=transform,
             source_lat=source_lat,
@@ -79,6 +163,8 @@ class Resampler:
             target_lat=target_lat,
             target_lon=target_lon,
             digest=digest,
+            axis_weights=axis_weights,
+            normalization=normalization,
         )
 
 
@@ -247,17 +333,34 @@ def resampler_digest(
     iterations: int,
     *,
     period: float | None = None,
+    method: ResampleMethod = "meanpreserving",
+    normalization: Normalization = "destination",
+    source_bounds: GridBounds | None = None,
+    target_bounds: GridBounds | None = None,
 ) -> bytes:
     """Cache key with ascending source latitudes; target order is significant.
 
     Nonperiodic keys retain their original bytes; cyclic keys include the period.
     """
+    validate_method(method, iterations, normalization, source_bounds, target_bounds)
     period = _validate_period(source_lon, period)
-    source_lat, _ = ensure_ascending_lats(source_lat)
+    source_lat, descending = ensure_ascending_lats(source_lat)
+    source_bounds = canonical_bounds(source_bounds, descending_lat=descending)
+    target_bounds = canonical_bounds(target_bounds)
     h = hashlib.sha256()
     for arr in (source_lat, source_lon, target_lat, target_lon):
         h.update(np.asarray(arr, dtype=np.float64).tobytes())
     h.update(str(iterations).encode())
     if period is not None:
         h.update(b"period:" + np.float64(period).tobytes())
+    if method == "conservative":
+        h.update(b"method:conservative;normalization:" + normalization.encode())
+        for name, bounds in ((b"source_bounds:", source_bounds), (b"target_bounds:", target_bounds)):
+            h.update(name)
+            if bounds is None:
+                h.update(b"inferred")
+            else:
+                for axis in bounds:
+                    h.update(repr(axis.shape).encode())
+                    h.update(axis.tobytes())
     return h.digest()

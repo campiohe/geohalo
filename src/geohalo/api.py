@@ -9,9 +9,16 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from geohalo._conservative import GridBounds, Normalization, ResampleMethod, validate_method
 from geohalo._sparse import projection_dtype
 from geohalo.bias_tree import BiasTree
-from geohalo.geometry import _validate_period, ensure_ascending_lats, same_grid, target_coords_from_resolution
+from geohalo.geometry import (
+    _conservative_edges,
+    _validate_period,
+    ensure_ascending_lats,
+    same_grid,
+    target_coords_from_resolution,
+)
 from geohalo.reduce_operator import ReduceOperator
 from geohalo.resampler import FactoredResampler, Resampler
 from geohalo.restricted_operator import RestrictedOperator, _grid_chunks
@@ -67,6 +74,7 @@ def _apply_matrix_da(
     resampler: Resampler,
     lat_dim: str,
     lon_dim: str,
+    skipna: bool,
 ) -> xr.DataArray:
     """Validate the source grid and apply the resampler over the spatial dims."""
     _require_spatial_dims(da, lat_dim, lon_dim)
@@ -79,7 +87,7 @@ def _apply_matrix_da(
         )
     batch_dims = [d for d in da.dims if d not in (lat_dim, lon_dim)]
     arr = da.transpose(*batch_dims, lat_dim, lon_dim).to_numpy()
-    out_flat = resampler.apply_grid(arr, descending=descending)
+    out_flat = resampler.apply_grid(arr, descending=descending, skipna=skipna)
     out_lat, out_lon = resampler.target_lat, resampler.target_lon
     out = out_flat.reshape(*arr.shape[:-2], out_lat.size, out_lon.size)
     return xr.DataArray(
@@ -97,20 +105,25 @@ def resample_grid_with_matrix[T: xr.DataArray | xr.Dataset](
     *,
     lat_dim: str = "latitude",
     lon_dim: str = "longitude",
+    skipna: bool = False,
 ) -> T:
     """Resample a matching source grid, accepting either latitude orientation.
 
     Raises ``ValueError`` if the source coordinates differ from the resampler's
     source grid. Output coordinates follow the resampler's target order.
+    For conservative resamplers, ``skipna=True`` averages only valid covered
+    area; by default contributing NaNs propagate. Unmapped cells return NaN.
     """
+    if skipna and resampler.method != "conservative":
+        raise ValueError("resampling skipna=True requires method='conservative'")
     if isinstance(source, xr.Dataset):
         return _map_spatial_vars(
             source,
-            lambda da: resample_grid_with_matrix(da, resampler, lat_dim=lat_dim, lon_dim=lon_dim),
+            lambda da: resample_grid_with_matrix(da, resampler, lat_dim=lat_dim, lon_dim=lon_dim, skipna=skipna),
             lat_dim,
             lon_dim,
         )
-    return _apply_matrix_da(source, resampler, lat_dim, lon_dim)
+    return _apply_matrix_da(source, resampler, lat_dim, lon_dim, skipna)
 
 
 def resample_grid[T: xr.DataArray | xr.Dataset](
@@ -121,18 +134,43 @@ def resample_grid[T: xr.DataArray | xr.Dataset](
     lon_dim: str = "longitude",
     iterations: int = 1,
     period: float | None = None,
+    method: ResampleMethod = "meanpreserving",
+    normalization: Normalization = "destination",
+    source_bounds: GridBounds | None = None,
+    skipna: bool = False,
 ) -> T:
     """Resample at a target spacing; ``period`` makes longitude a full cycle.
 
     ``period=360`` wraps interpolation and parent assignment at the seam. The
     generated longitude centres start at the source minimum and exclude its
     repeated endpoint. ``period=None`` retains clamped, min/max-based targets.
+    ``method='conservative'`` uses spherical area overlaps, with optional
+    ``normalization='covered'`` or apply-time ``skipna=True``. Target generation
+    still uses source centres, not their outer cell bounds; use an explicitly
+    built Resampler for matched source/target footprints. ``source_bounds`` is
+    an optional pair of latitude/longitude edge arrays (conservative only).
     """
+    validate_method(method, iterations, normalization, source_bounds, None)
+    if skipna and method != "conservative":
+        raise ValueError("resampling skipna=True requires method='conservative'")
     src_lat = source[lat_dim].to_numpy()
     src_lon = source[lon_dim].to_numpy()
     t_lat, t_lon = target_coords_from_resolution(src_lat, src_lon, target_resolution, period=period)
-    resampler = Resampler.compute(src_lat, src_lon, t_lat, t_lon, iterations=iterations, period=period)
-    return resample_grid_with_matrix(source, resampler, lat_dim=lat_dim, lon_dim=lon_dim)
+    target_bounds = None
+    if method == "conservative":
+        # Generated axes have a known spacing, even if coarsening leaves only
+        # one centre. Cyclic longitude closes the seam at a cyclic midpoint.
+        lat_edges = np.clip(np.r_[t_lat - target_resolution / 2, t_lat[-1] + target_resolution / 2], -90., 90.)
+        lon_edges = (
+            _conservative_edges(t_lon, None, latitude=False, period=period, cyclic=True)[0]
+            if period is not None else np.r_[t_lon - target_resolution / 2, t_lon[-1] + target_resolution / 2]
+        )
+        target_bounds = lat_edges, lon_edges
+    resampler = Resampler.compute(
+        src_lat, src_lon, t_lat, t_lon, iterations=iterations, period=period,
+        method=method, normalization=normalization, source_bounds=source_bounds, target_bounds=target_bounds,
+    )
+    return resample_grid_with_matrix(source, resampler, lat_dim=lat_dim, lon_dim=lon_dim, skipna=skipna)
 
 
 def reduce_with_operator[T: xr.DataArray | xr.Dataset](

@@ -233,3 +233,119 @@ def nearest_index(source: np.ndarray, target: np.ndarray, *, period: float | Non
     choose_left = (target - left) <= (right - target)
     idx = np.where(choose_left, pos - 1, pos)
     return idx if ascending else n_s - 1 - idx
+
+
+def _conservative_centres(
+    centres: np.ndarray, *, latitude: bool, period: float | None,
+) -> tuple[np.ndarray, bool]:
+    """Validate centres and return them ascending, with their orientation flag."""
+    centres = np.asarray(centres, dtype=np.float64)
+    if centres.ndim != 1 or centres.size == 0 or not np.isfinite(centres).all():
+        raise ValueError("conservative coordinates must be a nonempty finite 1-D array")
+    diffs = np.diff(centres)
+    if not (np.all(diffs > 0) or np.all(diffs < 0)):
+        raise ValueError("conservative coordinates must be strictly monotonic")
+    descending = centres.size > 1 and centres[0] > centres[-1]
+    ascending = centres[::-1] if descending else centres
+    if latitude and np.any(np.abs(ascending) > 90):
+        raise ValueError("latitude centres must lie within [-90, 90]")
+    if period is not None:
+        _validate_period(ascending, period)
+    return ascending, descending
+
+
+def _conservative_edges(
+    centres: np.ndarray, edges: np.ndarray | None, *, latitude: bool, period: float | None, cyclic: bool,
+) -> tuple[np.ndarray, bool]:
+    """Ascending cell edges and whether the caller's axis was descending."""
+    ascending, descending = _conservative_centres(centres, latitude=latitude, period=period)
+    if edges is None:
+        if cyclic:
+            # Midpoints across the seam close a full source cycle, including
+            # irregular grids and a single cell covering the entire period.
+            first = (ascending[-1] - period + ascending[0]) / 2
+            result = np.r_[first, (ascending[:-1] + ascending[1:]) / 2, first + period]
+        else:
+            if ascending.size < 2:
+                raise ValueError("single-cell conservative axes require explicit bounds")
+            result = midpoint_edges(ascending)
+        result = np.clip(result, -90., 90.) if latitude else result
+    else:
+        result = np.asarray(edges, dtype=np.float64)
+        if result.shape != (ascending.size + 1,) or not np.isfinite(result).all():
+            raise ValueError("cell bounds must be a finite 1-D array of length coordinates.size + 1")
+        result = result[::-1] if descending else result
+        if latitude and np.any(np.abs(result) > 90):
+            raise ValueError("latitude bounds must lie within [-90, 90]")
+    if not np.all(np.diff(result) > 0):
+        raise ValueError("cell bounds must be strictly monotonic in the coordinate order")
+    if np.any(ascending < result[:-1]) or np.any(ascending > result[1:]):
+        raise ValueError("each coordinate must lie within its cell bounds")
+    if period is not None:
+        span = result[-1] - result[0]
+        if cyclic and not np.isclose(span, period, rtol=1e-12, atol=0):
+            raise ValueError("periodic source bounds must cover exactly one period")
+        if not cyclic and span > period and not np.isclose(span, period, rtol=1e-12, atol=0):
+            raise ValueError("periodic target bounds must span no more than one period")
+    return result, descending
+
+
+def conservative_matrix_1d(
+    source: np.ndarray,
+    target: np.ndarray,
+    *,
+    latitude: bool = False,
+    period: float | None = None,
+    source_bounds: np.ndarray | None = None,
+    target_bounds: np.ndarray | None = None,
+) -> sp.csr_matrix:
+    """Cell overlaps divided by full target-cell widths, as a sparse 1-D matrix.
+
+    ``latitude=True`` measures widths in sin(latitude), otherwise in coordinate
+    units (longitude degrees). Latitude edges inferred from centres are clipped
+    at the poles. Explicit bounds must follow their coordinate order and have
+    one extra entry; they allow single-cell axes. Coordinates must be finite
+    and strictly monotonic, in either direction. Without bounds, midpoint edges
+    are inferred, requiring at least two centres on noncyclic axes.
+
+    ``period`` wraps longitude overlaps only. Source bounds must cover one full
+    cycle; inferred source bounds use cyclic midpoints. Target bounds remain
+    regional midpoint edges unless supplied, and may span at most one period.
+    Empty-overlap rows are zero, partial-overlap rows sum to their covered
+    fraction, and only strictly positive overlaps are stored (no 0 * NaN).
+    """
+    if latitude and period is not None:
+        raise ValueError("latitude cannot be periodic")
+    period = _validate_period(source, period)
+    src, reverse_source = _conservative_edges(
+        source, source_bounds, latitude=latitude, period=period, cyclic=period is not None,
+    )
+    dst, reverse_target = _conservative_edges(
+        target, target_bounds, latitude=latitude, period=period, cyclic=False,
+    )
+    if latitude:
+        src, dst = np.sin(np.deg2rad(src)), np.sin(np.deg2rad(dst))
+    if np.any(np.diff(src) <= 0) or np.any(np.diff(dst) <= 0):
+        raise ValueError("cell bounds must have positive width in the overlap measure")
+    widths = np.diff(dst)
+    rows, columns, data = [], [], []
+    n_source, n_target = src.size - 1, dst.size - 1
+    for row, (lower, upper, width) in enumerate(zip(dst[:-1], dst[1:], widths, strict=True)):
+        intervals = [(lower, upper)]
+        if period is not None:
+            left = src[0] + (lower - src[0]) % period
+            right = left + width
+            intervals = [(left, min(right, src[-1]))]
+            if right > src[-1]:
+                intervals.append((src[0], src[0] + right - src[-1]))
+        for left, right in intervals:
+            start = max(0, int(np.searchsorted(src, left, side="right")) - 1)
+            stop = min(n_source, int(np.searchsorted(src, right, side="left")))
+            col = np.arange(start, stop)
+            overlap = np.minimum(src[col + 1], right) - np.maximum(src[col], left)
+            keep = overlap > 0
+            col, overlap = col[keep], overlap[keep]
+            rows.extend([n_target - 1 - row if reverse_target else row] * col.size)
+            columns.extend(n_source - 1 - col if reverse_source else col)
+            data.extend(overlap / width)
+    return sp.csr_matrix((data, (rows, columns)), shape=(n_target, n_source))
