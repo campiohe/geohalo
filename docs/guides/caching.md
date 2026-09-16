@@ -10,7 +10,7 @@ These precomputed objects depend only on their inputs, not on grid values:
 | Object           | Depends on                                       | Built by                       |
 | ---------------- | ------------------------------------------------ | ------------------------------ |
 | `Stencil`        | grid coords + spherical flag + polygons + dtype  | `get_or_compute_stencil`       |
-| `Resampler`      | source/target coords + iterations + period       | `get_or_compute_resampler`     |
+| `Resampler`      | source/target coords + method + iterations + period + normalization + optional bounds | `get_or_compute_resampler` |
 | `BiasTree`       | edges + weights + how                            | `get_or_compute_tree`          |
 | `ReduceOperator` | stencil digest + source coords + iterations + dtype + period | `get_or_compute_reduce_operator` |
 | `RestrictedOperator` | fused operator digest + stored coords + spatial chunks | `get_or_compute_restricted_operator` |
@@ -71,6 +71,19 @@ and equivalent NumPy scalar values share a key. Restricted plans inherit the
 period through the fused operator digest. Existing `period=None` keys and
 payload formats are unchanged. The built matrices already encode the period,
 so no additional apply-time argument or cache metadata is needed.
+
+For conservative resampling, `get_or_compute_resampler` also accepts
+`method="conservative"`, `normalization`, `source_bounds`, and `target_bounds`.
+These build options distinguish cache entries; apply-time `skipna` does not.
+Source latitude bounds reverse with descending source latitudes, so the
+ascending/descending twins still reuse one entry. Explicit versus inferred
+bounds may have different keys even if they describe the same physical cells.
+
+Conservative resampler payloads use a separate version-2 representation holding
+the two sparse axis matrices and normalization, with no Kronecker matrix.
+Existing mean-preserving version-1 payloads and default digests still work.
+Other operator payload versions do not change. Both representations currently
+use the same trusted pickle-based cache backend.
 
 `Stencil`, `ReduceOperator`, and `RestrictedOperator` payloads store canonical
 row order. Their cache methods return **caller-ordered** objects: stencil rows

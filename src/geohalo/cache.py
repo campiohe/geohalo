@@ -26,6 +26,7 @@ except ImportError as exc:
 else:
     _REDIS_IMPORT_ERROR = None
 
+from geohalo._conservative import GridBounds, Normalization, ResampleMethod
 from geohalo.bias_tree import BiasTree, tree_digest
 from geohalo.reduce_operator import ReduceOperator, reduce_operator_digest
 from geohalo.resampler import Resampler, resampler_digest
@@ -101,31 +102,36 @@ def _deser_stencil(blob: bytes) -> Stencil:
 
 
 def _ser_resampler(r: Resampler) -> bytes:
-    return pk.dumps(
-        {
-            "version": PAYLOAD_VERSION,
-            "matrix": _csr_payload(r.transform_matrix),
-            "source_lat": r.source_lat,
-            "source_lon": r.source_lon,
-            "target_lat": r.target_lat,
-            "target_lon": r.target_lon,
-            "digest": r.digest,
-        },
-        protocol=pk.HIGHEST_PROTOCOL,
-    )
+    payload = {
+        "version": PAYLOAD_VERSION,
+        "source_lat": r.source_lat,
+        "source_lon": r.source_lon,
+        "target_lat": r.target_lat,
+        "target_lon": r.target_lon,
+        "digest": r.digest,
+    }
+    if r.axis_weights is None:
+        payload["matrix"] = _csr_payload(r.transform_matrix)
+    else:
+        payload.update(version=2, axis_weights=[_csr_payload(axis) for axis in r.axis_weights],
+                       normalization=r.normalization)
+    return pk.dumps(payload, protocol=pk.HIGHEST_PROTOCOL)
 
 
 def _deser_resampler(blob: bytes) -> Resampler:
     p = pk.loads(blob)
-    if p.get("version") != PAYLOAD_VERSION:
+    if p.get("version") not in (PAYLOAD_VERSION, 2):
         raise ValueError(f"unsupported resampler payload version: {p.get('version')!r}")
+    conservative = p["version"] == 2
     return Resampler(
-        transform_matrix=_csr_from_payload(p["matrix"]),
+        transform_matrix=None if conservative else _csr_from_payload(p["matrix"]),
         source_lat=np.asarray(p["source_lat"]),
         source_lon=np.asarray(p["source_lon"]),
         target_lat=np.asarray(p["target_lat"]),
         target_lon=np.asarray(p["target_lon"]),
         digest=p["digest"],
+        axis_weights=tuple(_csr_from_payload(axis) for axis in p["axis_weights"]) if conservative else None,
+        normalization=p["normalization"] if conservative else "destination",
     )
 
 
@@ -312,7 +318,7 @@ class _Cache:
             force_recompute,
         )
 
-    def get_or_compute_resampler(
+    def get_or_compute_resampler(  # noqa: PLR0913 - preserve the public keyword API
         self,
         source_lat: np.ndarray,
         source_lon: np.ndarray,
@@ -321,14 +327,22 @@ class _Cache:
         *,
         iterations: int = 1,
         period: float | None = None,
+        method: ResampleMethod = "meanpreserving",
+        normalization: Normalization = "destination",
+        source_bounds: GridBounds | None = None,
+        target_bounds: GridBounds | None = None,
         force_recompute: bool = False,
     ) -> Resampler:
-        digest = resampler_digest(source_lat, source_lon, target_lat, target_lon, iterations, period=period)
+        digest = resampler_digest(
+            source_lat, source_lon, target_lat, target_lon, iterations, period=period,
+            method=method, normalization=normalization, source_bounds=source_bounds, target_bounds=target_bounds,
+        )
         return self._get_or_compute(
             "resampler",
             digest,
             lambda: Resampler.compute(
                 source_lat, source_lon, target_lat, target_lon, iterations=iterations, period=period,
+                method=method, normalization=normalization, source_bounds=source_bounds, target_bounds=target_bounds,
             ),
             _ser_resampler,
             _deser_resampler,

@@ -104,6 +104,14 @@ Do not repeat the source endpoint (e.g. include −180° but not also +180°).
 This wraps sampling, not polygon geometries. See
 [periodic longitude](https://campiohe.github.io/geohalo/guides/resampling/#periodic-longitude).
 
+For area-weighted coarsening or bounded fields, use
+`resample_grid(da, target_resolution=2, method="conservative")`, or prebuild a
+conservative `Resampler` for explicit target centres/bounds. It applies spherical
+cell overlaps with two sparse 1-D factors; no full grid-to-grid matrix is built.
+The existing `method="meanpreserving"` remains the default and is intended for
+smooth refinement. See [conservative regridding](https://campiohe.github.io/geohalo/concepts/conservative/)
+for footprint alignment, partial coverage, and opt-in NaN handling.
+
 For clean lazy grids, opt into chunk-aware reads with a precomputed fused operator:
 
 ```python

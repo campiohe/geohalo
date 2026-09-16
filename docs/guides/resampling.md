@@ -2,8 +2,9 @@
 
 Resampling is a **first-class, reusable** operation in geohalo — not just a hidden step
 inside `reduce`. If you want the refined (or coarsened) field itself, `resample_grid`
-gives it to you, backed by the same [mean-preserving](../concepts/downscaling.md) sparse
-transform.
+gives it to you. Choose between the default
+[mean-preserving](../concepts/downscaling.md) sparse transform and
+[conservative spherical area overlaps](../concepts/conservative.md).
 
 ## One call
 
@@ -13,9 +14,26 @@ import geohalo as ghl
 fine = ghl.resample_grid(da, target_resolution=0.05, iterations=3)
 ```
 
-It works in **either direction** — a smaller `target_resolution` refines, a larger one
-coarsens — and mean-preservation is exact wherever geometrically possible (always when
-refining; coarsening can't preserve a source cell that has no target child).
+Both methods accept refining or coarsening coordinates, but preserve different means:
+
+| Method | Preserves | Typical use | Possible overshoot? |
+| --- | --- | --- | --- |
+| `"meanpreserving"` (default) | Each occupied parent's unweighted child mean | Smooth refinement | Yes |
+| `"conservative"` | Spherical area integral over the shared footprint, with destination normalization | Area-weighted coarsening; bounded fields | No, for fully covered cells |
+
+The default method is intended for refining: fine-to-coarse output is not an
+area-weighted block mean, and source cells with no target child cannot retain
+their values. Conservative refinement is piecewise constant on nested cells,
+not a smoother version of the default method.
+
+```python
+coarse = ghl.resample_grid(da, target_resolution=2, method="conservative")
+```
+
+Target generation still uses source-centre min/max (or one full longitude cycle
+with `period`), not source-cell outer edges. For identical-footprint conservation,
+use explicit target coordinates/bounds as shown in
+[conservative regridding](../concepts/conservative.md#matched-footprints).
 
 `resample_grid` accepts an `xr.DataArray` or an `xr.Dataset` (every spatial data variable
 is resampled, the rest pass through) and preserves all non-spatial dims.
@@ -38,7 +56,8 @@ fine = ghl.resample_grid_with_matrix(da, resampler)
 ```
 
 The `Resampler` is value-independent and [cacheable](caching.md) — built once per
-`(source grid, target grid, iterations, period)`.
+the source/target grids and build options: method, iterations, period, and, for
+conservative builds, normalization and optional bounds.
 
 ## Periodic longitude
 
@@ -108,9 +127,11 @@ to 178°. The existing overshoot and missing-data semantics are unchanged.
 The period must be positive and finite. Periodic source coordinates must be
 finite, one-dimensional, strictly monotonic, and span **less than** the period.
 Do not include both −180° and +180°, or both 0° and 360°: they repeat a cell.
-A single source centre is constant everywhere. Periodic targets must be finite
-and one-dimensional; their order is unrestricted. The 1-D helpers support
-irregular spacing, while stencil construction still requires a regular raster.
+For the default mean-preserving method, a single source centre is constant
+everywhere; periodic targets must be finite and one-dimensional, but their order
+is unrestricted. Conservative regridding has the stricter cell-bounds contract
+linked below. The 1-D helpers support irregular spacing, while stencil
+construction still requires a regular raster.
 
 Setting `period` explicitly declares that the source represents a cycle; there
 is no automatic global-grid detection. Using it on a regional source connects
@@ -123,13 +144,19 @@ the antimeridian. Supply geometries in the stencil's coordinate domain, splittin
 or unwrapping them yourself as needed. A prebuilt stencil can use an unwrapped
 regional target such as 175°–185° while sampling a −180°–180° source periodically.
 Without resampling, `reduce(..., period=360)` does not add periodic polygon
-coverage. This is also not spherical-area-conservative regridding.
+coverage. Wrapping by itself does not add spherical-area conservation; choose
+`method="conservative"` on a grid resampler for that. Its axes must be strictly
+monotonic and may cover at most one target cycle. See the
+[conservative bounds contract](../concepts/conservative.md#coordinates-and-cell-bounds).
 
 ## Choosing `iterations`
 
 `iterations` controls how far the [mean-preserving correction](../concepts/downscaling.md)
 reaches across the grid. Every value preserves each parent cell's mean exactly; higher
 counts trade build cost for smoothness.
+
+This parameter applies only to `method="meanpreserving"`. Conservative calls
+must leave `iterations=1`; other values raise `ValueError` rather than being ignored.
 
 | `iterations` | Character                                    | Cost              |
 | ------------ | -------------------------------------------- | ----------------- |
@@ -144,9 +171,14 @@ smooth = ghl.resample_grid(da, target_resolution=0.05, iterations=4)
 
 ## Cost note: materialised vs fused
 
-`resample_grid` materialises the full transform \(\mathbf{T}\), because you asked for the
+With the default method, `resample_grid` materialises the full transform \(\mathbf{T}\), because you asked for the
 **field**. That matrix can be large for a big refinement (hundreds of MB at fine target
 resolutions and high iteration counts).
+
+The conservative method instead stores two 1-D overlap matrices and applies
+them one axis at a time. It never materialises a full grid-to-grid transform.
+Fused polygon reducers still use the default mean-preserving method; to use
+conservative regridding before polygon reduction, resample explicitly first.
 
 If the refined field is only a stepping stone to **per-polygon values**, you don't need
 \(\mathbf{T}\) at all — go through `reduce(..., target_resolution=…)`, which
@@ -175,7 +207,7 @@ the resampler's source grid and raises `ValueError` on a mismatch, even when the
 grid shapes are identical. Target coordinates keep the order supplied when the
 resampler was built.
 
-If you multiply `Resampler.transform_matrix` directly, or call
+For the mean-preserving method, if you multiply `Resampler.transform_matrix` directly, or call
 `FactoredResampler.apply_flat`, flatten source values with **ascending latitude**
 and longitude in `source_lon` order. This corrects the convention in 1.1.0, where
 matrices built from descending latitudes expected descending values, causing the
