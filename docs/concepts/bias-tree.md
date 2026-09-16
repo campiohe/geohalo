@@ -53,7 +53,8 @@ rows. Build cost still depends on tree depth and the number of leaf–ancestor
 coefficients in the result; very deep chains need more products than shallow trees.
 
 Node ordering is unchanged: leaves sorted by `repr`, then internal nodes by
-depth and `repr`. Cache digests and payloads are unchanged as well.
+depth and `repr`. Cache input digests are unchanged; payloads now use
+[portable NPZ serialization](serialization.md).
 
 ## Usage
 

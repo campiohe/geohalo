@@ -97,6 +97,7 @@ nav:
       - Chunk-aware reduction: concepts/restricted-operator.md
       - NaN-aware & weighted reduction: concepts/masked.md
       - Hierarchical rollups: concepts/bias-tree.md
+      - Portable operator artifacts: concepts/serialization.md
   - Guides:
       - Caching the precompute: guides/caching.md
       - Resampling grids: guides/resampling.md

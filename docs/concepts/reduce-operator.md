@@ -126,7 +126,8 @@ Float32 halves the coefficient buffer, not the entire CSR object: index arrays
 are unchanged. Geometry extraction and fusion still use float64 work arrays
 before casting, so build-time peak memory is not halved. Casting does not reorder
 or merge sparse entries. Coefficient dtype is included in cache keys; float64
-entries remain compatible with existing caches.
+input digests are unchanged. [NPZ cache migration](serialization.md#migrating-existing-caches)
+requires a one-time rebuild of older pickle entries.
 
 `preserve_dtype=False` keeps the previous NumPy promotion rules. With a float32
 matrix and float32 values, sums are float32, but means normally become float64
@@ -199,7 +200,8 @@ option does not change operator digests or require rebuilding caches.
 Temporary dense storage therefore depends on one slice's contributing cells,
 rather than the total number of slices. The original matrix coefficient order
 and chosen matrix precision are preserved (float64 by default), including for float32 input. Canonical
-matrices and disk/Redis cache payloads retain their existing format.
+matrices retain their existing format; disk/Redis payloads use
+[portable NPZ serialization](serialization.md).
 
 This bounds the arithmetic's temporary memory; lazy inputs are still loaded in
 full by this entry point. To read only contributing chunks, opt in to

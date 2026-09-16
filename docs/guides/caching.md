@@ -29,7 +29,10 @@ def _get_or_compute(self, namespace, digest, compute, serialize, deserialize, fo
     if not force:
         blob = self._load(namespace, key)
         if blob is not None:
-            return deserialize(blob)
+            obj = deserialize(blob)
+            if obj.digest != digest:
+                raise ValueError("cached object digest does not match requested inputs")
+            return obj
     obj = compute()
     self._store(namespace, key, serialize(obj))
     return obj
@@ -54,22 +57,22 @@ The digests are also carefully **canonical**:
 
 Geometry hashing uses vectorised WKB encoding. During stencil construction, the
 same encoded bytes are reused for extraction and hashing. The digest byte format
-is unchanged for default float64 coefficients and `period=None`, so existing stencil and
-dependent reduce-operator cache entries remain valid.
+is unchanged for default float64 coefficients and `period=None`. The storage
+format has changed to NPZ; see [migration](../concepts/serialization.md#migrating-existing-caches).
 
 Both stencil and fused-operator cache methods accept `dtype=np.float32`, matching
 their builders. Dtype aliases normalize to the same native float32/float64 type
 before hashing; different coefficient dtypes use different cache entries.
 Restricted plans inherit that distinction through the fused operator digest.
-No payload-version change is needed: coefficient arrays already carry their dtype.
+NPZ coefficient arrays carry their dtype.
 The apply-time `preserve_dtype=True` flag does not affect cache keys.
 
 Resampler and fused-operator cache methods accept `period=360` for
 [cyclic longitude sampling](resampling.md#periodic-longitude). Periodic and
 nonperiodic builds use distinct keys, as do different periods; `360`, `360.0`,
 and equivalent NumPy scalar values share a key. Restricted plans inherit the
-period through the fused operator digest. Existing `period=None` keys and
-payload formats are unchanged. The built matrices already encode the period,
+period through the fused operator digest. Existing `period=None` input digests
+are unchanged. The built matrices already encode the period,
 so no additional apply-time argument or cache metadata is needed.
 
 For conservative resampling, `get_or_compute_resampler` also accepts
@@ -79,18 +82,16 @@ Source latitude bounds reverse with descending source latitudes, so the
 ascending/descending twins still reuse one entry. Explicit versus inferred
 bounds may have different keys even if they describe the same physical cells.
 
-Conservative resampler payloads use a separate version-2 representation holding
-the two sparse axis matrices and normalization, with no Kronecker matrix.
-Existing mean-preserving version-1 payloads and default digests still work.
-Other operator payload versions do not change. Both representations currently
-use the same trusted pickle-based cache backend.
+Both resampler representations use NPZ schema version 1, distinguished by the
+`method` metadata field. Conservative payloads hold two sparse axis matrices
+and normalization, with no Kronecker matrix. Mean-preserving payloads hold the
+full CSR transform. Default input digests are unchanged.
 
 `Stencil`, `ReduceOperator`, and `RestrictedOperator` payloads store canonical
 row order. Their cache methods return **caller-ordered** objects: stencil rows
 follow `geoms.index`, fused rows follow `stencil.keys`, and restricted rows follow
 `operator.keys`. Cache hits permute sparse rows, normalizers, and labels together;
-they never rerun geometry extraction, fusion, or read-plan construction. Existing
-sorted payloads work without migration. A digest identifies the canonical
+they never rerun geometry extraction, fusion, or read-plan construction. A digest identifies the canonical
 operator, not its returned row layout; use `keys` to interpret matrix rows.
 
 Duplicate labels remain distinct positional rows. Their existing hashing
@@ -102,7 +103,7 @@ polygon permutations.
 
 === "LocalCache"
 
-    Pickle files under `path/<namespace>/<key>.pkl`, published atomically (write to a
+    NPZ files under `path/<namespace>/<key>.npz`, published atomically (write to a
     `.tmp`, then `replace`) so a crash can't leave a half-written blob.
 
     ```python
@@ -116,7 +117,7 @@ polygon permutations.
 
 === "RedisCache"
 
-    Values under `<prefix>:<key>` in Redis — for sharing the precompute across workers or
+    NPZ bytes under `geohalo:<namespace>:npz:v1:<key>` in Redis — for sharing the precompute across workers or
     machines. Requires the `redis` extra.
 
     ```python
@@ -130,8 +131,23 @@ polygon permutations.
     ```
 
 Both backends share all of the get-or-compute and serialisation logic; they differ only
-in the `_load` / `_store` primitives. Serialised payloads carry a `version` field so a
-format change is rejected loudly rather than mis-read.
+in the `_load` / `_store` primitives. Payloads contain numeric arrays and typed
+JSON metadata, including schema and writer versions. Loading always uses
+`allow_pickle=False` and validates structure; cache hits also check the full
+stored input digest, not just the truncated storage key. A malformed hit raises
+an error; use `force_recompute=True` to replace it explicitly.
+
+The same bytes are available through `obj.to_npz()` and
+`Class.from_npz(blob)` for database/object-store persistence. See
+[portable operator artifacts](../concepts/serialization.md) for the schema,
+supported key types, and security boundaries. Custom Python object labels are
+not serializable; use supported scalar or tuple labels instead.
+
+!!! warning "One-time rebuild after upgrading from pickle caches"
+    Existing `.pkl` files and old Redis prefixes are ignored, not loaded or
+    deleted. The first request for each object rebuilds it into NPZ. There is no
+    automatic pickle migration fallback. Input digests are unchanged, and old
+    and new deployments use separate storage names.
 
 ## Which object should I cache?
 
@@ -158,7 +174,8 @@ out = ghl.reduce_with_operator(da, op)
 
 ## Cache miss vs hit, measured
 
-From the [benchmark report](../performance.md), building once and loading thereafter:
+Historical measurements from the [benchmark report](../performance.md), using
+the previous cache format; NPZ loading costs have not been rebenchmarked here:
 
 | object         | region            | miss (build + store) | hit (load) | speedup |
 | -------------- | ----------------- | -------------------- | ---------- | ------- |
@@ -166,8 +183,8 @@ From the [benchmark report](../performance.md), building once and loading therea
 | ReduceOperator | Brazil munis (5572), 0.05° | 4.40 s      | 0.6 ms     | ~7100×  |
 | BiasTree       | muni → state (5572) | 1.56 s             | 5.2 ms     | ~298×   |
 
-The first run pays for the geometry; every run after it pays for a `read_bytes` and an
-`unpickle`.
+The first run pays for the geometry; subsequent runs read NPZ arrays and rebuild
+the lightweight operator wrapper without recomputing geometry or fusion.
 
 !!! tip "Force a rebuild"
     Every `get_or_compute_*` takes `force_recompute=True` to bypass the cache and

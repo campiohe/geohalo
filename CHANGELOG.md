@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Add byte-based `to_npz()` / `from_npz()` to `Stencil`, `ReduceOperator`,
+  `Resampler`, `RestrictedOperator`, and `BiasTree`
+  ([#20](https://github.com/campiohe/geohalo/issues/20)). Versioned NumPy arrays
+  and typed JSON metadata preserve sparse buffers, grids, normalizers, read
+  plans, and pandas keys without executable object serialization. Both
+  resampler representations are supported. Loads disable pickle and validate
+  structure; cache hits also check the full input digest. **Cache migration:**
+  LocalCache now uses `.npz` files and Redis uses `:npz:v1:` prefixes. Legacy
+  entries are ignored and rebuilt, never automatically loaded or deleted.
+  This format change supersedes payload-compatibility notes below; build-input
+  digests remain unchanged. Unsupported custom key types fail explicitly.
+
 - Add `method="conservative"` to `Resampler.compute`, `resample_grid`, and
   local/Redis resampler caches ([#15](https://github.com/campiohe/geohalo/issues/15)).
   Two sparse 1-D overlap factors use sin(latitude) and longitude widths, applied
