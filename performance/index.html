@@ -336,6 +336,8 @@
       
         
       
+        
+      
     
     
     
@@ -531,6 +533,34 @@
     
   
     The fused reduce operator
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/restricted-operator/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chunk-aware reduction
   
 
     
@@ -917,6 +947,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#chunk-aware-reads" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chunk-aware reads
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rollups" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1118,6 +1159,17 @@
     <span class="md-ellipsis">
       
         The fusion win
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chunk-aware-reads" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chunk-aware reads
       
     </span>
   </a>
@@ -1381,6 +1433,54 @@ blob, builds in ~0.5 s, and loads in ~0.5 ms — same answer, ~900× smaller.</p
 <figure>
 <p><img alt="Materialised resampler vs fused reduce operator" src="../figures/fused-operator-size.png" width="720" /></p>
 </figure>
+<h2 id="chunk-aware-reads">Chunk-aware reads<a class="headerlink" href="#chunk-aware-reads" title="Permanent link">&para;</a></h2>
+<p><a href="../concepts/restricted-operator/"><code>RestrictedOperator</code></a> addresses the remaining
+full-grid I/O cost for clean lazy inputs. The synthetic
+<a href="https://github.com/campiohe/geohalo/issues/6">#6</a> benchmark uses a local in-memory
+Zarr v3 store and counts actual data-chunk reads:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>benchmarks.chunk_reads
+</span></code></pre></div>
+<p>For 24 float32 steps on a descending 721 × 1440 grid, 15 polygons in two distant
+regions, and storage chunks of 6 × 64 × 64, a local run measured:</p>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th style="text-align: right;">Data-chunk reads</th>
+<th style="text-align: right;">Compressed payload read</th>
+<th style="text-align: right;">Extra allocation peak</th>
+<th style="text-align: right;">Median time</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Full-grid <code>reduce_with_operator</code></td>
+<td style="text-align: right;">1,104</td>
+<td style="text-align: right;">84.747 MiB</td>
+<td style="text-align: right;">98.388 MiB</td>
+<td style="text-align: right;">1.0690 s</td>
+</tr>
+<tr>
+<td><code>reduce_with_restricted_operator</code></td>
+<td style="text-align: right;">12</td>
+<td style="text-align: right;">1.003 MiB</td>
+<td style="text-align: right;">0.467 MiB</td>
+<td style="text-align: right;">0.0277 s</td>
+</tr>
+</tbody>
+</table>
+<p>The plan reads two disjoint windows covering 12,288 of 1,038,240 spatial cells
+(1.18%). Every fetched data chunk was read once, and outputs matched exactly in
+this run. The benchmark asserts agreement at <code>rtol=1e-12</code>, <code>atol=1e-12</code>.</p>
+<p>Times are medians of three uninstrumented applications; the extra peak is from
+a separate <code>tracemalloc</code> run, not total process RSS. Data generation, store
+creation, coordinate loading, and operator construction are excluded. This is
+local decoding and reduction, <strong>not</strong> a cloud latency measurement. Physical I/O
+also depends on storage chunking, sharding, and any upstream Dask transformations.</p>
+<p>Environment: Python 3.14.4, xarray 2026.4.0, Zarr 3.4.0, NumPy 2.4.6, SciPy 1.17.1,
+Intel Core Ultra 5 125H in a Linux virtual machine. The application uses Zarr
+without Dask here; tests also count actual reads through Dask-backed Zarr and
+irregular Dask chunks.</p>
 <h2 id="rollups">Rollups<a class="headerlink" href="#rollups" title="Permanent link">&para;</a></h2>
 <p><a href="../concepts/bias-tree/">Hierarchical rollups</a> are another matmul. The full GADM Brazil
 muni → state hierarchy (5 571 leaves) rolls a batch of 50 slices up in ~5.6 ms; with a
@@ -1388,9 +1488,9 @@ muni → state hierarchy (5 571 leaves) rolls a batch of 50 slices up in ~5.6 ms
 <h3 id="tree-construction">Tree construction<a class="headerlink" href="#tree-construction" title="Permanent link">&para;</a></h3>
 <p>The synthetic benchmark for <a href="https://github.com/campiohe/geohalo/issues/8">#8</a>
 compares the previous row-by-row builder with the depth-bounded sparse builder:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>benchmarks.bias_tree_build
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>benchmarks.bias_tree_build<span class="w"> </span>--leaves<span class="w"> </span><span class="m">5570</span><span class="w"> </span>--fanout<span class="w"> </span><span class="m">10</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>benchmarks.bias_tree_build<span class="w"> </span>--leaves<span class="w"> </span><span class="m">20000</span><span class="w"> </span>--fanout<span class="w"> </span><span class="m">10</span><span class="w"> </span>--repeats<span class="w"> </span><span class="m">1</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>benchmarks.bias_tree_build
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>benchmarks.bias_tree_build<span class="w"> </span>--leaves<span class="w"> </span><span class="m">5570</span><span class="w"> </span>--fanout<span class="w"> </span><span class="m">10</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>benchmarks.bias_tree_build<span class="w"> </span>--leaves<span class="w"> </span><span class="m">20000</span><span class="w"> </span>--fanout<span class="w"> </span><span class="m">10</span><span class="w"> </span>--repeats<span class="w"> </span><span class="m">1</span>
 </span></code></pre></div>
 <p>Local measurements of complete builds, including validation, ordering, matrix
 assembly, and hashing (but excluding synthetic hierarchy generation). The first

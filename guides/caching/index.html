@@ -336,6 +336,8 @@
       
         
       
+        
+      
     
     
     
@@ -531,6 +533,34 @@
     
   
     The fused reduce operator
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/restricted-operator/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chunk-aware reduction
   
 
     
@@ -1075,7 +1105,7 @@
 <p>geohalo's whole performance story rests on doing the expensive geometric work <strong>once</strong>.
 The cache is what makes "once" stick across processes, machines, and repeated runs.</p>
 <h2 id="what-is-worth-caching">What is worth caching<a class="headerlink" href="#what-is-worth-caching" title="Permanent link">&para;</a></h2>
-<p>Four objects are pure functions of their inputs and expensive to build:</p>
+<p>These precomputed objects depend only on their inputs, not on grid values:</p>
 <table>
 <thead>
 <tr>
@@ -1105,6 +1135,11 @@ The cache is what makes "once" stick across processes, machines, and repeated ru
 <td>stencil digest + source coords + iterations</td>
 <td><code>get_or_compute_reduce_operator</code></td>
 </tr>
+<tr>
+<td><code>RestrictedOperator</code></td>
+<td>fused operator digest + stored coords + spatial chunks</td>
+<td><code>get_or_compute_restricted_operator</code></td>
+</tr>
 </tbody>
 </table>
 <p>None of them depends on the grid <strong>values</strong> — so a single cached object serves every
@@ -1128,8 +1163,10 @@ and you get a fresh key (and a fresh build) automatically. There is no manual
 invalidation to forget.</p>
 <p>The digests are also carefully <strong>canonical</strong>:</p>
 <ul>
-<li>a descending-latitude grid and its ascending twin hash <strong>identically</strong>
-  (latitudes are sorted before hashing);</li>
+<li>a descending-latitude grid and its ascending twin hash <strong>identically</strong> for
+  canonical grid operators (latitudes are sorted before hashing). A
+  <a href="../../concepts/restricted-operator/"><code>RestrictedOperator</code></a> instead hashes the
+  stored orientation because its read windows depend on that order;</li>
 <li>the polygon digest is <strong>order-invariant</strong> (keys are sorted, then <code>(repr(key),
   WKB(geom))</code> pairs are hashed), so the order you pass geometries in doesn't matter;</li>
 <li>the spherical flag is mixed in as <code>b"sph"</code> / <code>b"flat"</code> so a corrected and an

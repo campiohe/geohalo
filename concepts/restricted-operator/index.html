@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://campiohe.github.io/geohalo/concepts/latitude-correction/">
+        <link rel="canonical" href="https://campiohe.github.io/geohalo/concepts/restricted-operator/">
       
       
-        <link rel="prev" href="../exact-coverage/">
+        <link rel="prev" href="../reduce-operator/">
       
       
-        <link rel="next" href="../downscaling/">
+        <link rel="next" href="../masked/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Latitude correction - geohalo</title>
+        <title>Chunk-aware reduction - geohalo</title>
       
     
     
@@ -82,7 +82,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#latitude-correction" class="md-skip">
+        <a href="#chunk-aware-reduction" class="md-skip">
           Skip to content
         </a>
       
@@ -117,7 +117,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Latitude correction
+              Chunk-aware reduction
             
           </span>
         </div>
@@ -468,37 +468,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Latitude correction
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../latitude-correction/" class="md-nav__link">
         
   
   
@@ -514,70 +487,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#the-problem" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The problem
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-fix" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The fix
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#turning-it-off" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Turning it off
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#where-it-folds-in" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Where it folds in
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -643,10 +552,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../restricted-operator/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chunk-aware reduction
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -662,6 +598,81 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-plan-contains" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the plan contains
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chunk-layouts-and-coordinates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chunk layouts and coordinates
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#batch-memory-and-datasets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Batch memory and Datasets
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cache-the-plan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cache the plan
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Limitations
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1016,10 +1027,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-problem" class="md-nav__link">
+  <a href="#what-the-plan-contains" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The problem
+        What the plan contains
       
     </span>
   </a>
@@ -1027,10 +1038,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-fix" class="md-nav__link">
+  <a href="#chunk-layouts-and-coordinates" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The fix
+        Chunk layouts and coordinates
       
     </span>
   </a>
@@ -1038,10 +1049,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#turning-it-off" class="md-nav__link">
+  <a href="#batch-memory-and-datasets" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Turning it off
+        Batch memory and Datasets
       
     </span>
   </a>
@@ -1049,10 +1060,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#where-it-folds-in" class="md-nav__link">
+  <a href="#cache-the-plan" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Where it folds in
+        Cache the plan
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Limitations
       
     </span>
   </a>
@@ -1079,68 +1101,103 @@
   
 
 
-<h1 id="latitude-correction">Latitude correction<a class="headerlink" href="#latitude-correction" title="Permanent link">&para;</a></h1>
-<p><a href="../exact-coverage/">Exact coverage</a> tells you what <em>fraction</em> of each cell a polygon
-covers. But a fraction is dimensionless — to weight cells against each other physically,
-you need their <strong>areas</strong>. And on a regular lat/lon grid, equal steps in degrees are
-<strong>not</strong> equal areas.</p>
-<h2 id="the-problem">The problem<a class="headerlink" href="#the-problem" title="Permanent link">&para;</a></h2>
-<p>A 1° × 1° cell spans the same number of degrees everywhere, but as you move toward the
-poles the meridians converge, so the cell's footprint on the sphere shrinks. A cell at
-60° latitude has only about <strong>half</strong> the area of one at the equator; at 80° it is down
-to roughly a sixth.</p>
-<figure>
-<p><img alt="A constant-degree cell shrinks toward the poles" src="../../figures/latitude-area.png" width="820" /></p>
-<figcaption>
-Relative area of a 1° cell as a function of latitude. The same grid spacing in degrees
-hides a 6× spread in physical area between the equator and 80°.
-</figcaption>
-</figure>
-<p>If you treated every cell as equal, high-latitude cells would be <strong>over-weighted</strong> in
-the mean — a polygon's average would lean toward whatever its poleward cells happen to
-say.</p>
-<h2 id="the-fix">The fix<a class="headerlink" href="#the-fix" title="Permanent link">&para;</a></h2>
-<p>geohalo multiplies each cell's coverage fraction by its true spherical area before
-row-normalising. The area of the cell between latitude edges <span class="arithmatex">\(\varphi_\text{bot}\)</span> and
-<span class="arithmatex">\(\varphi_\text{top}\)</span> and spanning <span class="arithmatex">\(\Delta\lambda\)</span> in longitude is the exact integral
-of the sphere's surface element:</p>
-<div class="arithmatex">\[
-A \;=\; R^2 \,\Delta\lambda \,\bigl(\sin\varphi_\text{top} - \sin\varphi_\text{bot}\bigr)
-\]</div>
-<p>with <span class="arithmatex">\(R = 6\,371\,008.8\ \text{m}\)</span> (the mean Earth radius) and angles in radians. The
-<span class="arithmatex">\(\sin\varphi_\text{top} - \sin\varphi_\text{bot}\)</span> term is what bends the curve above:
-it is the band-area formula for a sphere, exact for the latitude direction.</p>
-<p>This is <code>geohalo.geometry.cell_areas</code>:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">lat_edges</span> <span class="o">=</span> <span class="n">midpoint_edges</span><span class="p">(</span><span class="n">lats</span><span class="p">)</span>          <span class="c1"># N+1 edges from N centres</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">lon_edges</span> <span class="o">=</span> <span class="n">midpoint_edges</span><span class="p">(</span><span class="n">lons</span><span class="p">)</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">sin_top</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">deg2rad</span><span class="p">(</span><span class="n">lat_edges</span><span class="p">[</span><span class="mi">1</span><span class="p">:]))</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">sin_bot</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">deg2rad</span><span class="p">(</span><span class="n">lat_edges</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]))</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">dlon_rad</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">deg2rad</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">lon_edges</span><span class="p">))</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">area_per_lat</span> <span class="o">=</span> <span class="p">(</span><span class="n">EARTH_RADIUS_M</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">sin_top</span> <span class="o">-</span> <span class="n">sin_bot</span><span class="p">)</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="k">return</span> <span class="n">area_per_lat</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">dlon_rad</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:]</span>
+<h1 id="chunk-aware-reduction">Chunk-aware reduction<a class="headerlink" href="#chunk-aware-reduction" title="Permanent link">&para;</a></h1>
+<p>A <a href="../reduce-operator/">fused <code>ReduceOperator</code></a> avoids constructing a fine grid,
+but <code>reduce_with_operator</code> still loads the full source array. For lazy Zarr or
+Dask inputs, use <code>RestrictedOperator</code> to read only the spatial chunks that
+contribute to the polygons.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">xarray</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">xr</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">geohalo</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ghl</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># chunks={} uses backend-preferred Dask chunks; chunks=None also works without Dask.</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">ds</span> <span class="o">=</span> <span class="n">xr</span><span class="o">.</span><span class="n">open_zarr</span><span class="p">(</span><span class="s2">&quot;forecast.zarr&quot;</span><span class="p">,</span> <span class="n">chunks</span><span class="o">=</span><span class="p">{})</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">da</span> <span class="o">=</span> <span class="n">ds</span><span class="p">[</span><span class="s2">&quot;t2m&quot;</span><span class="p">]</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">op</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">get_or_compute_reduce_operator</span><span class="p">(</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">stencil</span><span class="p">,</span> <span class="n">da</span><span class="o">.</span><span class="n">latitude</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="n">da</span><span class="o">.</span><span class="n">longitude</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="n">iterations</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="p">)</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="n">restricted</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">RestrictedOperator</span><span class="o">.</span><span class="n">from_grid</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="n">da</span><span class="p">)</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="n">out</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce_with_restricted_operator</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">restricted</span><span class="p">)</span>  <span class="c1"># (..., geom)</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="n">totals</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce_with_restricted_operator</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">restricted</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;sum&quot;</span><span class="p">)</span>
 </span></code></pre></div>
-<p>Each stencil weight is then <code>coverage × area</code>, so a half-covered equatorial cell
-correctly outweighs a half-covered polar cell.</p>
-<h2 id="turning-it-off">Turning it off<a class="headerlink" href="#turning-it-off" title="Permanent link">&para;</a></h2>
-<p>For a planar / equal-area treatment — every cell weight 1.0 — pass
-<code>spherical_correction=False</code>:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">out</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">geoms</span><span class="p">,</span> <span class="n">spherical_correction</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<p>The existing entry points are unchanged. This is an explicit, opt-in path for
+clean (non-NaN, unweighted) inputs, with an <strong>eager</strong> xarray result. Names, attrs,
+scalar and batch coordinates, and polygon MultiIndex keys are preserved.</p>
+<h2 id="what-the-plan-contains">What the plan contains<a class="headerlink" href="#what-the-plan-contains" title="Permanent link">&para;</a></h2>
+<ol>
+<li>The nonzero columns of the fused operator, including any resampling halo.</li>
+<li>Disjoint windows in the grid's <strong>stored</strong> latitude order, aligned to chunks.</li>
+<li>Positions of contributing cells inside each window and a compact CSR matrix.</li>
+</ol>
+<p>Adjacent chunks are grouped into filled rectangles. These rectangles do not
+overlap or include untouched chunks: a diagonal or ring of touched chunks is
+not replaced with its larger bounding box. Zero-valued stored coefficients do
+not trigger reads. Remapping columns preserves coefficient accumulation order,
+including negative coefficients introduced by resampling.</p>
+<p>Application slices each window with <code>isel</code> <strong>before</strong> accessing values, gathers
+the contributing cells, and multiplies by the compact matrix. Latitude sorting,
+full-grid materialization, and conversion to a full-width CSC matrix are avoided.</p>
+<h2 id="chunk-layouts-and-coordinates">Chunk layouts and coordinates<a class="headerlink" href="#chunk-layouts-and-coordinates" title="Permanent link">&para;</a></h2>
+<p><code>from_grid</code> inspects the data variable's Dask chunks first, then
+<code>encoding["preferred_chunks"]</code>, then <code>encoding["chunks"]</code>. It reads coordinate
+arrays but does not load grid values. Dask and Zarr are optional: install the
+backend you use; geohalo does not add them as runtime dependencies.</p>
+<p>For a grid without chunk metadata, pass explicit sizes:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Integers mean regular chunks, with a shorter final chunk if necessary.</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">restricted</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">RestrictedOperator</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="n">da</span><span class="o">.</span><span class="n">latitude</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">)</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Tuples specify every chunk length and must sum to the corresponding axis size.</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="c1"># Example for a 721 x 1440 grid:</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">restricted</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">RestrictedOperator</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="n">op</span><span class="p">,</span> <span class="n">da</span><span class="o">.</span><span class="n">latitude</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">164</span><span class="p">,</span> <span class="mi">200</span><span class="p">,</span> <span class="mi">257</span><span class="p">),</span> <span class="p">(</span><span class="mi">64</span><span class="p">,)</span> <span class="o">*</span> <span class="mi">22</span> <span class="o">+</span> <span class="p">(</span><span class="mi">32</span><span class="p">,),</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="p">)</span>
 </span></code></pre></div>
-<p>This makes <code>cell_areas</code> return all-ones and the weights become pure coverage fractions.
-It is the right choice when your grid is already on an equal-area projection, or when you
-deliberately want unweighted coverage.</p>
-<div class="admonition note">
-<p class="admonition-title">Spherical, not ellipsoidal</p>
-<p>geohalo uses a <strong>spherical</strong> Earth, not the WGS84 ellipsoid. The difference in cell
-area is within ~0.3 %, which is negligible next to the centroid/all-touched bias the
-<a href="../exact-coverage/">coverage choice</a> removes. Ellipsoidal areas are a deliberate
-non-goal.</p>
-</div>
-<h2 id="where-it-folds-in">Where it folds in<a class="headerlink" href="#where-it-folds-in" title="Permanent link">&para;</a></h2>
-<p>The correction lives entirely inside the <a href="../stencil/">stencil</a> build — it is part of
-the precompute, so it costs nothing at apply time. The <code>spherical_correction</code> flag is
-also mixed into the stencil's <a href="../../guides/caching/">cache digest</a> (<code>b"sph"</code> vs
-<code>b"flat"</code>), so a spherical stencil and a planar one never collide in the cache.</p>
+<p>A plan is specific to the stored latitude orientation, longitude coordinates,
+and spatial chunk boundaries. Application rejects incompatible coordinates or
+known chunk layouts before loading that variable. Rebuild after rechunking or
+changing orientation. After slicing or rearranging backend arrays, ensure their
+encoding metadata still describes the current view; stale encoding should be
+corrected or cleared before supplying explicit chunk sizes. Dimension-keyed
+<code>preferred_chunks</code> survives dimension transposes, unlike positional metadata.</p>
+<p>For efficient physical I/O, align Dask chunks with storage chunks. A Dask graph
+that rechunks or transforms data may need extra upstream reads; a storage backend
+may also fetch larger units, such as Zarr shards. The plan controls requested
+logical windows, not those underlying backend decisions. See xarray's
+<a href="https://docs.xarray.dev/en/stable/generated/xarray.open_zarr.html"><code>open_zarr</code> chunk options</a>
+and <a href="https://docs.dask.org/en/stable/array-slicing.html">Dask slicing behavior</a>.</p>
+<h2 id="batch-memory-and-datasets">Batch memory and Datasets<a class="headerlink" href="#batch-memory-and-datasets" title="Permanent link">&para;</a></h2>
+<p>The reducer processes native batch chunks separately, reading one spatial window
+at a time and keeping a compact gathered buffer for that batch. Without batch
+chunk metadata, blocks target roughly 8 MiB of working data, with a minimum of
+one slice. Native chunks can exceed this target. Memory also includes the eager
+output, sparse operator, and backend decoding/scheduler allocations; this is not
+a process-memory cap.</p>
+<p>One plan serves every Dataset variable with the same spatial grid and layout:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">out</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce_with_restricted_operator</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">restricted</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Variables without both spatial dimensions pass through unchanged. Variables can
+have different batch dimensions and batch chunks. For different spatial layouts,
+create and apply a separate plan per layout. Use <code>lat_dim</code>, <code>lon_dim</code>, and
+<code>geom_dim</code> for custom dimension names (<code>from_grid</code> accepts the spatial names too).</p>
+<h2 id="cache-the-plan">Cache the plan<a class="headerlink" href="#cache-the-plan" title="Permanent link">&para;</a></h2>
+<p>Both <code>LocalCache</code> and <code>RedisCache</code> support:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">restricted</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">get_or_compute_restricted_operator</span><span class="p">(</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">op</span><span class="p">,</span> <span class="n">da</span><span class="o">.</span><span class="n">latitude</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">da</span><span class="o">.</span><span class="n">variable</span><span class="o">.</span><span class="n">chunksizes</span><span class="p">[</span><span class="s2">&quot;latitude&quot;</span><span class="p">],</span> <span class="n">da</span><span class="o">.</span><span class="n">variable</span><span class="o">.</span><span class="n">chunksizes</span><span class="p">[</span><span class="s2">&quot;longitude&quot;</span><span class="p">],</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>The digest includes the fused operator digest, <strong>stored</strong> coordinates, and
+normalized spatial chunk sizes. Unlike the canonical fused operator, ascending
+and descending read plans have different digests. Regular integer chunk sizes
+and equivalent explicit tuples share a cache entry. Batch sizes/chunks and grid
+values are not part of the key. Existing operator cache formats are unchanged.</p>
+<h2 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h2>
+<p>NaN handling and per-cell weights still use
+<a href="../masked/"><code>reduce_with_stencil</code></a>. Renormalizing a fused matrix on source cells
+is not generally equivalent to resampling first and masking target cells, so this
+path does not silently introduce different missing-data semantics. It also does
+not return a deferred Dask result or distribute reductions across workers.</p>
+<p>For measured read counts, transferred payload, and memory, see
+<a href="../../performance/#chunk-aware-reads">performance</a>.</p>
 
 
 

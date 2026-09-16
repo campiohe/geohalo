@@ -16,7 +16,7 @@
         <link rel="prev" href="../downscaling/">
       
       
-        <link rel="next" href="../masked/">
+        <link rel="next" href="../restricted-operator/">
       
       
         
@@ -321,6 +321,8 @@
   
     
     
+      
+        
       
         
       
@@ -643,6 +645,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../restricted-operator/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chunk-aware reduction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1156,8 +1186,8 @@ rather than the total number of slices. The original matrix coefficient order
 and float64 precision are preserved, including for float32 input. Canonical
 matrices and disk/Redis cache payloads retain their existing format.</p>
 <p>This bounds the arithmetic's temporary memory; lazy inputs are still loaded in
-full by the xarray entry point. Reading only relevant storage chunks is separate
-work tracked in <a href="https://github.com/campiohe/geohalo/issues/6">#6</a>.</p>
+full by this entry point. To read only contributing chunks, opt in to
+<a href="../restricted-operator/"><code>RestrictedOperator</code> and <code>reduce_with_restricted_operator</code></a>.</p>
 <h2 id="its-already-your-fast-path">It's already your fast path<a class="headerlink" href="#its-already-your-fast-path" title="Permanent link">&para;</a></h2>
 <p>You rarely call this directly. <code>reduce</code> and <code>reduce_with_stencil</code> use exactly this
 fusion internally for clean data: they build a <code>ReduceOperator</code> once and delegate to

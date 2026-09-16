@@ -334,6 +334,8 @@
       
         
       
+        
+      
     
     
     
@@ -529,6 +531,34 @@
     
   
     The fused reduce operator
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/restricted-operator/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chunk-aware reduction
   
 
     
@@ -948,6 +978,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#geohalo.reduce_with_restricted_operator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        reduce_with_restricted_operator
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1071,6 +1112,45 @@
     <span class="md-ellipsis">
       
         apply_grid
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#geohalo.RestrictedOperator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RestrictedOperator
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="RestrictedOperator">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#geohalo.RestrictedOperator.compute" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#geohalo.RestrictedOperator.from_grid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        from_grid
       
     </span>
   </a>
@@ -1272,6 +1352,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#geohalo.reduce_with_restricted_operator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        reduce_with_restricted_operator
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1395,6 +1486,45 @@
     <span class="md-ellipsis">
       
         apply_grid
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#geohalo.RestrictedOperator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RestrictedOperator
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="RestrictedOperator">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#geohalo.RestrictedOperator.compute" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#geohalo.RestrictedOperator.from_grid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        from_grid
       
     </span>
   </a>
@@ -1659,6 +1789,43 @@ operator's precision without copying or upcasting the entire batch.</p>
 
     </div>
 
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="geohalo.reduce_with_restricted_operator" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">geohalo.reduce_with_restricted_operator</span>
+
+
+<a href="#geohalo.reduce_with_restricted_operator" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">reduce_with_restricted_operator</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">grid</span><span class="p">:</span> <span class="n">T</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">operator</span><span class="p">:</span> <span class="n">RestrictedOperator</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="o">*</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">how</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;mean&quot;</span><span class="p">,</span> <span class="s2">&quot;sum&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;mean&quot;</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">lat_dim</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;latitude&quot;</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">lon_dim</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;longitude&quot;</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">geom_dim</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;geom&quot;</span><span class="p">,</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">T</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents first">
+
+        <p>Reduce clean data, reading only the plan's contributing spatial chunks.</p>
+<p>Returns an eager result, preserving batch coordinates, names, and attrs.
+Each batch chunk is processed separately; only one spatial window and its
+gathered cells are held at a time. Without batch chunk metadata, blocks target
+8 MiB of working data (at least one slice). Native chunks may exceed this.</p>
+<p>Coordinates must match the plan's stored latitude order and longitude grid.
+Known spatial chunk layouts must also match; rebuild the plan after changing
+either. Dataset variables without both spatial dimensions pass through.
+As with <code>reduce_with_operator</code>, NaNs and per-cell weights require the
+separate <code>reduce_with_stencil</code> path, especially when resampling is fused.</p>
+
+
+    </div>
+
 </div><hr />
 <h2 id="resampling">Resampling<a class="headerlink" href="#resampling" title="Permanent link">&para;</a></h2>
 
@@ -1873,6 +2040,121 @@ source grid. Output coordinates follow the resampler's target order.</p>
 <p>Large grids gather only referenced cells, one batch slice at a time.
 <code>descending=True</code> interprets source rows in descending latitude order.
 The canonical matrix and its arithmetic precision are unchanged.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="geohalo.RestrictedOperator" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">geohalo.RestrictedOperator</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#geohalo.RestrictedOperator" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents first">
+
+
+
+        <p>Reusable chunk-aligned read plan for a :class:<code>ReduceOperator</code>.</p>
+<p>Latitude coordinates and windows are in <em>stored</em> order, not canonical order.
+A plan is specific to that orientation and the spatial chunk layout. The
+compact matrix keeps the original coefficient accumulation order.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="geohalo.RestrictedOperator.compute" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">compute</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-classmethod"><code>classmethod</code></small>
+  </span>
+
+<a href="#geohalo.RestrictedOperator.compute" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">compute</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">operator</span><span class="p">:</span> <span class="n">ReduceOperator</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">source_lat</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">lat_chunks</span><span class="p">:</span> <span class="n">ChunkSizes</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">lon_chunks</span><span class="p">:</span> <span class="n">ChunkSizes</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RestrictedOperator</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Build from stored latitudes and explicit chunk sizes (regular or irregular).</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="geohalo.RestrictedOperator.from_grid" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">from_grid</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-classmethod"><code>classmethod</code></small>
+  </span>
+
+<a href="#geohalo.RestrictedOperator.from_grid" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">from_grid</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">operator</span><span class="p">:</span> <span class="n">ReduceOperator</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">grid</span><span class="p">:</span> <span class="n">DataArray</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="o">*</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">lat_dim</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;latitude&quot;</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">lon_dim</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;longitude&quot;</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RestrictedOperator</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Infer layout from Dask chunks or backend encoding, without reading values.</p>
+<p>For a Dataset, pass one spatial variable; reuse the plan for variables
+with the same layout. For missing/stale metadata, use <code>compute</code> with
+explicit chunk sizes instead. Dask and Zarr are not required dependencies.</p>
 
 
     </div>
