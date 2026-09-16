@@ -1181,6 +1181,13 @@ preserves the existing sparse arithmetic precision and divides by <code>row_sums
 for means, so float32 inputs still normally produce float64 results. Neither
 method changes the input arrays. Missing-data renormalization is opt-in via
 <code>restricted.apply(gathered, skipna=True)</code>.</p>
+<p>Build the fused operator with <code>dtype=np.float32</code> to get float32 coefficients in
+the restricted plan too. To retain floating input dtype in the result, call
+<code>restricted.apply(gathered, preserve_dtype=True)</code> or use the same flag on
+<code>reduce_with_restricted_operator</code>. It composes with <code>skipna=True</code> and <code>how="sum"</code>.
+Integer inputs retain normal promotion, including floating-point means. The
+flag controls result storage, not matrix or normalization precision; float64
+normalizers are retained. See <a href="../reduce-operator/#coefficient-and-result-dtypes">dtype controls</a>.</p>
 <p>You can read concurrently, provided the resulting arrays retain the plan's
 window order. Alternatively, pass a generator to <code>gather</code> to read and release
 one window at a time:</p>

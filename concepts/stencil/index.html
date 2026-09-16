@@ -1210,6 +1210,13 @@ with the matching cells of the data vector, is the polygon's aggregate.
 <p><code>__post_init__</code> precomputes <code>row_sums = occupancy_matrix.sum(axis=1)</code> — each polygon's
 total overlap area. That vector is the denominator for <code>how="mean"</code>, so the mean hot
 path never re-sums the matrix.</p>
+<p><code>Stencil.compute(..., dtype=np.float32)</code> stores coverage coefficients in float32;
+float64 remains the default. Geometry and area calculations run in float64 before
+casting. For float32 matrices, <code>row_sums</code> explicitly accumulates the stored weights
+in float64, including after cache reloads. Coordinates remain float64 too.
+Only float32 and float64 coefficient dtypes are supported. For smaller output
+arrays as well, enable <code>preserve_dtype=True</code> on the reducer; see
+<a href="../reduce-operator/#coefficient-and-result-dtypes">coefficient and result dtypes</a>.</p>
 <h2 id="empty-overlaps-are-errors-not-silent-zeros">Empty overlaps are errors, not silent zeros<a class="headerlink" href="#empty-overlaps-are-errors-not-silent-zeros" title="Permanent link">&para;</a></h2>
 <p>If a polygon does not intersect the grid at all — or its overlap area rounds to zero —
 geohalo raises <code>EmptyOverlapError(geom_key)</code> rather than emitting an all-zero row that

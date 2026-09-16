@@ -1157,6 +1157,12 @@ are not interchangeable. Fused coefficients can be negative, so even a positive
 surviving denominator can yield an overshoot or a poorly conditioned mean.
 Choose the mask location deliberately; the opt-in does not change <code>reduce</code> or
 <code>reduce_with_stencil</code>.</p>
+<p>All polygon reducers also accept <code>preserve_dtype=True</code> to retain each floating
+input variable's result dtype. This does not change where NaNs are masked or
+lower normalization precision; integer means remain floating-point. The
+stencil's masked/weighted path processes floating inputs slice by slice when
+this flag is enabled, avoiding a full-batch float64 result before casting. See
+<a href="../reduce-operator/#coefficient-and-result-dtypes">dtype controls</a>.</p>
 <h2 id="the-masked-path">The masked path<a class="headerlink" href="#the-masked-path" title="Permanent link">&para;</a></h2>
 <p><code>reduce_with_stencil</code> picks the path automatically:</p>
 <pre class="mermaid"><code>flowchart TD

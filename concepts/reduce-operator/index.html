@@ -621,6 +621,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#coefficient-and-result-dtypes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Coefficient and result dtypes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#opt-in-source-cell-nan-handling" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1078,6 +1089,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#coefficient-and-result-dtypes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Coefficient and result dtypes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#opt-in-source-cell-nan-handling" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1204,12 +1226,59 @@ matrix directly on the source grid:</p>
 <p>Matrix rows, <code>row_sums</code>, and output values follow <code>stencil.keys</code>, which preserves
 the caller's polygon order. Cache hits return that same requested order even
 when another caller populated the entry in a different order.</p>
+<h3 id="coefficient-and-result-dtypes">Coefficient and result dtypes<a class="headerlink" href="#coefficient-and-result-dtypes" title="Permanent link">&para;</a></h3>
+<p>Storage precision and result dtype are independent, opt-in choices:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">stencil</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">get_or_compute_stencil</span><span class="p">(</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">target_lat</span><span class="p">,</span> <span class="n">target_lon</span><span class="p">,</span> <span class="n">geoms</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="p">)</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">op</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">get_or_compute_reduce_operator</span><span class="p">(</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="n">stencil</span><span class="p">,</span> <span class="n">da</span><span class="o">.</span><span class="n">latitude</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="n">da</span><span class="o">.</span><span class="n">longitude</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="p">)</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="n">out</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce_with_operator</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">op</span><span class="p">,</span> <span class="n">preserve_dtype</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="c1"># For a float32 da: op.matrix.dtype == out.dtype == np.dtype(&quot;float32&quot;)</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="c1"># op.row_sums.dtype remains float64.</span>
+</span></code></pre></div>
+<p>Both builders default to <code>dtype=np.float64</code> and accept float32 or float64 (also
+as NumPy dtype objects or equivalent strings). Request float32 on each builder
+whose coefficients you want stored in float32; <code>ReduceOperator.compute</code> defaults
+to float64 even for a float32 stencil. A <code>RestrictedOperator</code> inherits its fused
+operator's dtype. Coordinate and normalizer arrays stay float64. Stencil row sums
+accumulate the <strong>stored</strong> coefficients in float64; fused operators retain those
+normalizers rather than summing their potentially signed coefficients.</p>
+<p>Float32 halves the coefficient buffer, not the entire CSR object: index arrays
+are unchanged. Geometry extraction and fusion still use float64 work arrays
+before casting, so build-time peak memory is not halved. Casting does not reorder
+or merge sparse entries. Coefficient dtype is included in cache keys; float64
+entries remain compatible with existing caches.</p>
+<p><code>preserve_dtype=False</code> keeps the previous NumPy promotion rules. With a float32
+matrix and float32 values, sums are float32, but means normally become float64
+because normalizers are float64. <code>preserve_dtype=True</code> returns floating-point
+inputs in their own dtype, including means and <code>skipna=True</code> results. It does
+<strong>not</strong> downcast a float64 matrix or change accumulation/normalization precision.
+Integer and boolean inputs retain normal promotion, so means are floating-point,
+not truncated integers. Dataset variables are handled independently; non-spatial
+variables pass through unchanged.</p>
+<p>The flag is supported by <code>reduce</code>, <code>reduce_with_stencil</code>, both prebuilt xarray
+reducers, <code>ReduceOperator.apply_grid</code>, and <code>RestrictedOperator.apply</code>. Results
+are allocated in the chosen dtype; projection temporaries stay bounded by a
+slice or small block rather than a full float64 result batch. The stencil's
+masked/weighted path processes floating inputs one slice at a time when enabled.
+<code>preserve_dtype</code> is apply-time only and does not require another cached operator.</p>
+<p>Float32 coefficients or results lose precision and range. Representative tests
+agree with float64 within <code>1e-5</code> relative error, but this is <strong>not a universal
+bound</strong>: signed cancellation, small surviving denominators, and extreme values
+can amplify errors or overflow. Keep float64 when those risks matter. Returning
+float64 results from float32 coefficients cannot recover discarded coefficient
+precision. <code>reduce</code> still builds float64 coefficients; prebuild a stencil/operator
+to opt into float32 storage.</p>
 <h3 id="opt-in-source-cell-nan-handling">Opt-in source-cell NaN handling<a class="headerlink" href="#opt-in-source-cell-nan-handling" title="Permanent link">&para;</a></h3>
 <p>Contributing NaNs propagate by default, preserving existing behavior. Pass
 <code>skipna=True</code> to omit missing <strong>source</strong> cells and renormalize each mean over
 the surviving signed weights:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">out</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce_with_operator</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">op</span><span class="p">,</span> <span class="n">skipna</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">totals</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce_with_operator</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">op</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;sum&quot;</span><span class="p">,</span> <span class="n">skipna</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">out</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce_with_operator</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">op</span><span class="p">,</span> <span class="n">skipna</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">totals</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce_with_operator</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">op</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;sum&quot;</span><span class="p">,</span> <span class="n">skipna</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </span></code></pre></div>
 <p>An all-missing zone has a NaN mean and a zero sum. Means also return NaN when
 the surviving signed weight is zero or negative. Only NaNs are excluded;
@@ -1240,7 +1309,7 @@ values are temporary per-slice arrays, never full-batch copies. Enabling this
 option does not change operator digests or require rebuilding caches.</p>
 <p>Temporary dense storage therefore depends on one slice's contributing cells,
 rather than the total number of slices. The original matrix coefficient order
-and float64 precision are preserved, including for float32 input. Canonical
+and chosen matrix precision are preserved (float64 by default), including for float32 input. Canonical
 matrices and disk/Redis cache payloads retain their existing format.</p>
 <p>This bounds the arithmetic's temporary memory; lazy inputs are still loaded in
 full by this entry point. To read only contributing chunks, opt in to
