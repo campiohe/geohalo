@@ -85,6 +85,10 @@ op = cache.get_or_compute_reduce_operator(
 out = ghl.reduce_with_operator(da, op)     # (..., geom); also accepts how="sum"
 ```
 
+Matrix rows, `row_sums`, and output values follow `stencil.keys`, which preserves
+the caller's polygon order. Cache hits return that same requested order even
+when another caller populated the entry in a different order.
+
 ### Opt-in source-cell NaN handling
 
 Contributing NaNs propagate by default, preserving existing behavior. Pass

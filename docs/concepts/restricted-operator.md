@@ -23,7 +23,9 @@ totals = ghl.reduce_with_restricted_operator(da, restricted, how="sum")
 This is an explicit chunk-aware path for unweighted inputs, with an **eager**
 xarray result. Contributing NaNs propagate by default; `skipna=True` opts into
 source-cell masking. Names, attrs, scalar and batch coordinates, and polygon
-MultiIndex keys are preserved.
+MultiIndex keys are preserved. Matrix rows and results follow `op.keys`, retaining
+the caller's polygon order even on cache hits; window order is independent of
+polygon row order.
 
 ## What the plan contains
 

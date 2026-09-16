@@ -8,6 +8,7 @@ backends share all of that logic in :class:`_Cache`; they differ only in the
 
 import pickle as pk
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Literal
 
@@ -220,6 +221,17 @@ def _deser_restricted_op(blob: bytes) -> RestrictedOperator:
     )
 
 
+def _take_rows[T: Stencil | ReduceOperator | RestrictedOperator](
+    obj: T, order: np.ndarray, keys: pd.Index,
+) -> T:
+    """Permute every row-aligned field, without copying already-ordered matrices."""
+    if np.array_equal(order, np.arange(len(order))):
+        return obj if obj.keys.identical(keys) else replace(obj, keys=keys)
+    if isinstance(obj, Stencil):
+        return replace(obj, occupancy_matrix=obj.occupancy_matrix[order], keys=keys)
+    return replace(obj, matrix=obj.matrix[order], row_sums=obj.row_sums[order], keys=keys)
+
+
 class _Cache:
     """Get-or-compute logic shared by both backends.
 
@@ -252,6 +264,32 @@ class _Cache:
         self._store(namespace, key, serialize(obj))
         return obj
 
+    def _get_or_compute_rows[T: Stencil | ReduceOperator | RestrictedOperator](
+        self,
+        namespace: str,
+        digest: bytes,
+        keys: pd.Index,
+        compute: Callable[[], T],
+        serialize: Callable[[T], bytes],
+        deserialize: Callable[[bytes], T],
+        force: bool,
+    ) -> T:
+        """Store canonical rows, but return the requested order on both misses and hits.
+
+        Use the same positional sort as geometry hashing, not a key lookup:
+        duplicate labels need distinct rows too. Existing sorted v1 payloads
+        already have this layout, so no digest or payload migration is needed.
+        """
+        order = np.argsort([repr(key) for key in keys])
+        inverse = np.empty_like(order)
+        inverse[order] = np.arange(len(order))
+        return self._get_or_compute(
+            namespace, digest, compute,
+            lambda obj: serialize(_take_rows(obj, order, keys.take(order))),
+            lambda blob: _take_rows(deserialize(blob), inverse, keys),
+            force,
+        )
+
     def get_or_compute_stencil(
         self,
         lats: np.ndarray,
@@ -262,9 +300,10 @@ class _Cache:
         force_recompute: bool = False,
     ) -> Stencil:
         digest = stencil_digest(lats, lons, geoms, spherical_correction=spherical_correction)
-        return self._get_or_compute(
+        return self._get_or_compute_rows(
             "stencil",
             digest,
+            geoms.index,
             lambda: Stencil.compute(lats, lons, geoms, spherical_correction=spherical_correction),
             _ser_stencil,
             _deser_stencil,
@@ -320,9 +359,10 @@ class _Cache:
         force_recompute: bool = False,
     ) -> ReduceOperator:
         digest = reduce_operator_digest(stencil.digest, source_lat, source_lon, iterations)
-        return self._get_or_compute(
+        return self._get_or_compute_rows(
             "reduceop",
             digest,
+            stencil.keys,
             lambda: ReduceOperator.compute(stencil, source_lat, source_lon, iterations=iterations),
             _ser_reduce_op,
             _deser_reduce_op,
@@ -340,8 +380,8 @@ class _Cache:
     ) -> RestrictedOperator:
         """Cache a read plan for a fused operator, stored latitude order, and layout."""
         digest = restricted_operator_digest(operator, source_lat, lat_chunks, lon_chunks)
-        return self._get_or_compute(
-            "restrictedop", digest,
+        return self._get_or_compute_rows(
+            "restrictedop", digest, operator.keys,
             lambda: RestrictedOperator.compute(operator, source_lat, lat_chunks, lon_chunks),
             _ser_restricted_op, _deser_restricted_op, force_recompute,
         )

@@ -23,11 +23,11 @@ flowchart TD
    checked for regular spacing — `exactextract`'s raster model assumes a uniform
    EPSG:4326 grid, and an irregular axis would silently misplace coverage fractions.
 
-2. **Sort the polygons by key.** `repr(key)` ordering makes the build (and its
-   [digest](../guides/caching.md)) independent of the order you passed geometries in.
-   Encode the sorted geometries with one vectorised
+2. **Encode polygons in caller order.** Encode the geometries with one vectorised
    [`shapely.to_wkb`](https://shapely.readthedocs.io/en/stable/reference/shapely.to_wkb.html)
    call. The resulting binary geometry bytes serve both extraction and hashing.
+   Only hashing uses a `repr(key)` sort, keeping the canonical
+   [digest](../guides/caching.md) unchanged.
 
 3. **Exact coverage.** A `NumPyRasterSource` describes the grid's bounding box;
    [`exact_extract`](https://github.com/isciences/exactextract) returns, for each
@@ -42,13 +42,35 @@ flowchart TD
    one. See [latitude correction](latitude-correction.md).
 
 5. **Assemble CSR.** The `(polygon, cell, weight)` triples become a
-   `scipy.sparse.csr_matrix` — the `occupancy_matrix`.
+   `scipy.sparse.csr_matrix` — the `occupancy_matrix`, in caller row order.
 
 !!! note "cell_id → grid index"
     `exactextract` numbers cells from the top-left with longitude fastest. geohalo
     converts back to its ascending-latitude convention with
     `row_asc = n_lat - 1 - cell_id // n_lon` and `col = cell_id % n_lon`, so the
     matrix columns line up with a `flat = arr.reshape(-1, n_lat * n_lon)` of the data.
+
+## Polygon row order
+
+Row `i` always corresponds to `geoms.iloc[i]`: `stencil.keys` matches the input
+index, and `occupancy_matrix` and `row_sums` use that same order. `ReduceOperator`
+and `RestrictedOperator` inherit it, as do NumPy and xarray reduction results.
+This also holds when loading from LocalCache or RedisCache, even if a previous
+caller requested the same polygons in a different order.
+
+Duplicate labels are kept as separate positional rows, not merged. Prefer unique
+keys for label-based selection and hierarchy aggregation. MultiIndex levels and
+names are preserved. `BiasTree` retains its own leaves-first node order;
+`aggregate_bias_with_tree` aligns xarray reductions to its leaves by key.
+
+!!! warning "Change from 1.2.0"
+    Older versions sorted polygon rows by `repr(key)`. Remove any positional
+    permutation that previously undid this sort. To explicitly retain that order:
+
+    ```python
+    order = np.argsort([repr(key) for key in geoms.index])
+    stencil = ghl.Stencil.compute(lats, lons, geoms.iloc[order])
+    ```
 
 ## What a row looks like
 

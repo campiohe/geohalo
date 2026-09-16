@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Preserve the caller's polygon order in `Stencil.compute`, reduction matrix
+  rows, and NumPy/xarray reduction outputs
+  ([#18](https://github.com/campiohe/geohalo/issues/18)). Local and Redis caches
+  store canonical rows and restore the requested order, keeping existing
+  digests and payloads valid. **Compatibility:** outputs no longer sort polygon
+  keys; remove any positional permutation previously used to undo that sort.
+  To retain the previous order, sort the input GeoSeries by `repr(key)` first.
+  `BiasTree` node order is unchanged; xarray aggregation aligns leaves by key.
+
 - Add opt-in `skipna=True` to `reduce_with_operator`,
   `reduce_with_restricted_operator`, `RestrictedOperator.apply`, and
   `ReduceOperator.apply_grid` ([#16](https://github.com/campiohe/geohalo/issues/16)).
