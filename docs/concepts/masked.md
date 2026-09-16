@@ -4,7 +4,7 @@ The [single-matmul fast path](reduce-operator.md) assumes clean data: every cell
 valid and every cell counts equally. Two situations break that assumption, and geohalo
 handles both by **renormalising per slice** instead of trusting a fixed denominator.
 
-## Why a fixed operator can't do it
+## Why a fixed denominator is not enough
 
 The mean is \((\mathbf{W}\mathbf{x})_i\) divided by polygon \(i\)'s total overlap area,
 the row sum \(\sum_j W_{ij}\). That denominator is baked into the operator — correct
@@ -16,6 +16,32 @@ cells are NaN can differ from slice to slice. The same goes for **per-cell weigh
 population-weighted mean divides by the weighted valid area, not the geometric area. No
 single precomputed scalar captures a per-slice mask, so geohalo recomputes the
 denominator on the fly with a second matmul.
+
+## Prebuilt operators: source-cell masking
+
+For a prebuilt `ReduceOperator` or `RestrictedOperator`, explicitly enable
+`skipna=True` on the reducer (or on `RestrictedOperator.apply`):
+
+```python
+out = ghl.reduce_with_operator(grid, operator, skipna=True)
+out = ghl.reduce_with_restricted_operator(grid, restricted, skipna=True)
+out_numpy = restricted.apply(gathered, skipna=True)
+```
+
+The operator itself is reused. On slices with missing source values, the
+numerator projects zero-filled values and the denominator projects the validity
+mask. A mean with a nonpositive denominator returns NaN; `how="sum"` omits
+missing contributions without renormalization and returns zero if all are missing.
+Clean slices keep their precomputed denominator. `skipna=False` is the default
+and retains the previous NaN-propagating behavior.
+
+Without resampling, this is the same unweighted mask calculation as the stencil
+path below. When resampling is fused, however, these APIs mask **source cells**;
+the stencil path masks **target cells after resampling**. The two calculations
+are not interchangeable. Fused coefficients can be negative, so even a positive
+surviving denominator can yield an overshoot or a poorly conditioned mean.
+Choose the mask location deliberately; the opt-in does not change `reduce` or
+`reduce_with_stencil`.
 
 ## The masked path
 
@@ -112,4 +138,5 @@ mask arithmetic — but still milliseconds. With a 1 % NaN mask over 5 571 polyg
 batch of 50 slices it runs in ~14 ms, versus ~6 ms clean (see the
 [benchmarks](../performance.md)). When a grid resample is also needed, the masked path
 keeps the resampler **factored** (`FactoredResampler`) and applies it per slice, rather
-than fusing it — because fusion would re-bake the denominator it is trying to keep live.
+than fusing it, to preserve its resample-then-mask semantics. Opt-in source-cell
+masking can reuse the fused operator because it implements a different operation.

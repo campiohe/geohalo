@@ -11,6 +11,7 @@ import pandas as pd
 import scipy.sparse as sp
 import xarray as xr
 
+from geohalo._sparse import project_values, projection_dtype
 from geohalo.geometry import ensure_ascending_lats, grid_digest, same_grid
 from geohalo.reduce_operator import ReduceOperator
 
@@ -178,7 +179,9 @@ class RestrictedOperator:
             raise ValueError(f"expected {len(self.windows)} window arrays, got more")
         return np.empty(0, dtype=np.float64) if gathered is None else gathered
 
-    def apply(self, gathered: np.ndarray, *, how: Literal["mean", "sum"] = "mean") -> np.ndarray:
+    def apply(
+        self, gathered: np.ndarray, *, how: Literal["mean", "sum"] = "mean", skipna: bool = False,
+    ) -> np.ndarray:
         """Reduce ``(..., contributing_cells)`` to ``(..., zones)`` in ``keys`` order.
 
         ``gathered`` must be in the column order produced by ``gather``. Sum
@@ -186,9 +189,12 @@ class RestrictedOperator:
         Matrix precision and coefficient accumulation order are preserved, with
         per-batch-slice products to avoid upcasting or copying an entire batch.
 
-        Like ``reduce_with_operator``, this assumes clean, unweighted values:
-        contributing NaNs propagate; missing cells are not renormalized. This
-        method does not read data or require xarray objects or Dask.
+        By default, contributing NaNs propagate. ``skipna=True`` omits missing
+        source cells: sums return the remaining weighted contributions (zero if
+        all are missing), and means divide by the surviving signed weight (NaN
+        if nonpositive). With fused resampling this differs from masking after
+        resampling; negative coefficients can still produce overshoots.
+        This method does not read data or require xarray objects or Dask.
         """
         if how not in ("mean", "sum"):
             raise ValueError(f"how must be 'mean' or 'sum', got {how!r}")
@@ -196,10 +202,12 @@ class RestrictedOperator:
         if gathered.ndim < 1 or gathered.shape[-1] != self.matrix.shape[1]:
             raise ValueError(f"expected trailing cell dimension {self.matrix.shape[1]}, got {gathered.shape}")
         batch_shape = gathered.shape[:-1]
-        out = np.empty((*batch_shape, self.matrix.shape[0]), dtype=np.result_type(gathered.dtype, self.matrix.dtype))
+        row_sums = self.row_sums if how == "mean" else None
+        dtype = projection_dtype(gathered.dtype, self.matrix.dtype, row_sums)
+        out = np.empty((*batch_shape, self.matrix.shape[0]), dtype=dtype)
         for index in np.ndindex(batch_shape):
-            out[index] = self.matrix @ gathered[index]
-        return out / self.row_sums if how == "mean" else out
+            out[index] = project_values(self.matrix, gathered[index], row_sums=row_sums, skipna=skipna)
+        return out
 
     @classmethod
     def compute(

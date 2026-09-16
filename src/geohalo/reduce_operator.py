@@ -15,6 +15,7 @@ magnitude smaller than ``T`` and its size is independent of the iteration count.
 import hashlib
 from dataclasses import dataclass
 from functools import cached_property
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -59,14 +60,25 @@ class ReduceOperator:
     def _grid_matrix(self) -> GridMatrix:
         return GridMatrix.for_reduction(self.matrix, (self.source_lat.size, self.source_lon.size))
 
-    def apply_grid(self, values: np.ndarray, *, descending: bool = False) -> np.ndarray:
-        """Project (..., latitude, longitude) values without normalising rows.
+    def apply_grid(
+        self, values: np.ndarray, *, descending: bool = False,
+        how: Literal["mean", "sum"] = "sum", skipna: bool = False,
+    ) -> np.ndarray:
+        """Project (..., latitude, longitude) values; default to an unnormalized sum.
 
         Large grids gather only referenced cells, one batch slice at a time.
         ``descending=True`` interprets source rows in descending latitude order.
         The canonical matrix and its arithmetic precision are unchanged.
+
+        ``how="mean"`` divides by ``row_sums``. With ``skipna=True``, sums omit
+        missing source cells and means divide by the surviving signed weight
+        (NaN if nonpositive). This is source-cell masking, not resample-then-mask.
         """
-        return self._grid_matrix.apply(values, descending=descending)
+        if how not in ("mean", "sum"):
+            raise ValueError(f"how must be 'mean' or 'sum', got {how!r}")
+        return self._grid_matrix.apply(
+            values, descending=descending, row_sums=self.row_sums if how == "mean" else None, skipna=skipna,
+        )
 
     def __repr__(self) -> str:
         return (

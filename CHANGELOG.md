@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add opt-in `skipna=True` to `reduce_with_operator`,
+  `reduce_with_restricted_operator`, `RestrictedOperator.apply`, and
+  `ReduceOperator.apply_grid` ([#16](https://github.com/campiohe/geohalo/issues/16)).
+  Means renormalize over surviving source-cell weights and return NaN for
+  nonpositive denominators; sums omit missing contributions (zero if all are
+  missing). Masks are bounded per slice, and restricted reads do not change.
+  Default NaN propagation, cache formats, and the stencil path's
+  resample-then-mask semantics are unchanged.
+
 - Add `RestrictedOperator.gather` and `RestrictedOperator.apply` for reducing
   NumPy arrays supplied by caller-owned readers
   ([#17](https://github.com/campiohe/geohalo/issues/17)). Window iterators support

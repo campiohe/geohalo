@@ -35,9 +35,12 @@ class CountingStore(WrapperStore):
 @pytest.mark.parametrize("dask", [False, True])
 @pytest.mark.parametrize("descending", [False, True])
 @pytest.mark.parametrize("transpose", [False, True])
-def test_zarr_v3_reads_only_touched_chunks_once(dask, descending, transpose):
+@pytest.mark.parametrize("skipna", [False, True])
+def test_zarr_v3_reads_only_touched_chunks_once(dask, descending, transpose, skipna):
     operator = make_operator()
     eager = make_grid(operator, descending=descending, batch_shape=(5,)).drop_vars("model")
+    if skipna:
+        eager.values[..., 7 if descending else 0, 1] = np.nan
     store = CountingStore(MemoryStore())
     eager.to_dataset().to_zarr(
         store, encoding={"t2m": {"chunks": (2, 2, 2)}}, zarr_format=3, consolidated=False,
@@ -47,8 +50,8 @@ def test_zarr_v3_reads_only_touched_chunks_once(dask, descending, transpose):
         lazy = ds.t2m.transpose("longitude", "dim0", "latitude") if transpose else ds.t2m
         plan = RestrictedOperator.from_grid(operator, lazy)
         assert not any(key.startswith("t2m/c/") for key in store.reads)
-        got = reduce_with_restricted_operator(lazy, plan)
-        xr.testing.assert_identical(got, reduce_with_operator(eager, operator))
+        got = reduce_with_restricted_operator(lazy, plan, skipna=skipna)
+        xr.testing.assert_identical(got, reduce_with_operator(eager, operator, skipna=skipna))
         rows, cols = np.divmod(operator.matrix.indices, 10)
         if descending:
             rows = 7 - rows

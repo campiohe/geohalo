@@ -20,9 +20,10 @@ out = ghl.reduce_with_restricted_operator(da, restricted)  # (..., geom)
 totals = ghl.reduce_with_restricted_operator(da, restricted, how="sum")
 ```
 
-The existing entry points are unchanged. This is an explicit, opt-in path for
-clean (non-NaN, unweighted) inputs, with an **eager** xarray result. Names, attrs,
-scalar and batch coordinates, and polygon MultiIndex keys are preserved.
+This is an explicit chunk-aware path for unweighted inputs, with an **eager**
+xarray result. Contributing NaNs propagate by default; `skipna=True` opts into
+source-cell masking. Names, attrs, scalar and batch coordinates, and polygon
+MultiIndex keys are preserved.
 
 ## What the plan contains
 
@@ -62,7 +63,8 @@ batch shapes. It selects cells in the compact matrix's column order. The result
 keeps the input dtype; mixed window dtypes use NumPy's common dtype. `apply`
 preserves the existing sparse arithmetic precision and divides by `row_sums`
 for means, so float32 inputs still normally produce float64 results. Neither
-method changes the input arrays or introduces missing-data renormalization.
+method changes the input arrays. Missing-data renormalization is opt-in via
+`restricted.apply(gathered, skipna=True)`.
 
 You can read concurrently, provided the resulting arrays retain the plan's
 window order. Alternatively, pass a generator to `gather` to read and release
@@ -159,13 +161,29 @@ and descending read plans have different digests. Regular integer chunk sizes
 and equivalent explicit tuples share a cache entry. Batch sizes/chunks and grid
 values are not part of the key. Existing operator cache formats are unchanged.
 
-## Limitations
+## Missing values and limitations
 
-NaN handling and per-cell weights still use
-[`reduce_with_stencil`](masked.md). Renormalizing a fused matrix on source cells
-is not generally equivalent to resampling first and masking target cells, so this
-path does not silently introduce different missing-data semantics. It also does
-not return a deferred Dask result or distribute reductions across workers.
+The xarray and NumPy entry points share the same opt-in:
+
+```python
+out = ghl.reduce_with_restricted_operator(da, restricted, skipna=True)
+means = restricted.apply(gathered, skipna=True)
+totals = restricted.apply(gathered, how="sum", skipna=True)
+```
+
+Missing source cells are excluded from means' numerators and denominators.
+Means with no positive surviving signed weight return NaN; sums omit missing
+contributions and return zero if all are missing. Clean slices need one sparse
+product; only masked means need a second. Masks are formed on gathered cells,
+one batch slice at a time. There is no extra I/O or full-grid NaN scan, and the
+plan/cache does not depend on this apply-time option.
+
+Renormalizing a fused matrix on source cells is not generally equivalent to
+resampling first and masking target cells. Signed resampling weights can cause
+overshoots and unstable means near cancellation; this option does not clip them.
+Use [`reduce_with_stencil`](masked.md) for target-cell masking or per-cell weights.
+These entry points do not return deferred Dask results or distribute reductions
+across workers.
 
 For measured read counts, transferred payload, and memory, see
 [performance](../performance.md#chunk-aware-reads).
