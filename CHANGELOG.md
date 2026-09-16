@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add `geohalo.geometry.polygon_areas` for zone areas in m² on the same sphere
+  as `cell_areas` ([#21](https://github.com/campiohe/geohalo/issues/21)). Integrates
+  straight lon/lat edges analytically, including sloped edges, holes, multipart
+  geometries, and full-globe rectangles. Preserves input order, returns NaN for
+  missing geometries, validates coordinates/topology/declared CRS, and leaves
+  longitudes unwrapped. Existing cell areas, stencil weights, and reductions
+  are unchanged; partial-cell stencil areas remain an approximation.
+
 - Add byte-based `to_npz()` / `from_npz()` to `Stencil`, `ReduceOperator`,
   `Resampler`, `RestrictedOperator`, and `BiasTree`
   ([#20](https://github.com/campiohe/geohalo/issues/20)). Versioned NumPy arrays

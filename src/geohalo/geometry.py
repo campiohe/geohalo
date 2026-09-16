@@ -1,6 +1,8 @@
 """Pure grid math: edges, cell areas, digests, coord generation, resample building blocks."""
 
 import hashlib
+from collections.abc import Sequence
+from math import fsum
 
 import geopandas as gpd
 import numpy as np
@@ -74,6 +76,100 @@ def cell_areas(lats: np.ndarray, lons: np.ndarray, *, spherical: bool = True) ->
     dlon_rad = np.deg2rad(np.diff(lon_edges))
     area_per_lat = (EARTH_RADIUS_M**2) * (sin_top - sin_bot)
     return area_per_lat[:, None] * dlon_rad[None, :]
+
+
+def polygon_areas(geoms: gpd.GeoSeries | Sequence[shapely.Geometry | None] | np.ndarray) -> np.ndarray:
+    """Spherical areas in m², using the same radius as :func:`cell_areas`.
+
+    Accept a GeoSeries or a one-dimensional sequence of Shapely geometries in
+    longitude/latitude degrees. Return a float64 array in input order, without
+    index labels. Missing geometries return NaN; empty geometries and non-area
+    geometries return zero. Polygon holes are subtracted and multipart or
+    collection areas are added (not unioned). Z coordinates are ignored.
+
+    Edges are straight segments in the supplied lon/lat coordinates, not
+    geodesics. Integration is analytic, including sloped edges. Longitudes
+    are NOT wrapped: a box from -170 to 170 spans 340 degrees, while a narrow
+    seam-crossing box can use 170 to 190, or be split at the antimeridian.
+    Each polygon must span at most 360 degrees. Full-globe boxes are supported.
+
+    Coordinates must be finite, latitudes within [-90, 90], and geometries
+    topologically valid. Invalid inputs raise ValueError; non-geometries raise
+    TypeError. A GeoSeries CRS, when set, must be EPSG:4326 (or equivalent).
+    No reprojection, repair, clipping, or longitude unwrapping is performed.
+
+    Stencil weights use planar cell-coverage fractions times spherical cell
+    areas. They share these units and radius, but only approximate this area
+    in partially covered cells. For planar areas, use Shapely's ``area``.
+    """
+    if isinstance(geoms, gpd.GeoSeries):
+        if geoms.crs is not None and not geoms.crs.equals("EPSG:4326", ignore_axis_order=True):
+            raise ValueError("polygon_areas requires longitude/latitude degrees (EPSG:4326)")
+        geoms = geoms.to_numpy()
+    geometries = np.asarray(geoms, dtype=object)
+    if geometries.ndim != 1:
+        raise ValueError("geoms must be a one-dimensional sequence; wrap a single geometry in a list")
+    result = np.empty(len(geometries), dtype=np.float64)
+    for i, geom in enumerate(geometries):
+        if geom is None:
+            result[i] = np.nan
+            continue
+        if not isinstance(geom, shapely.Geometry):
+            raise TypeError(f"geoms[{i}] must be a Shapely geometry or None")
+        coords = shapely.get_coordinates(geom)
+        if not np.isfinite(coords).all() or np.any(np.abs(coords[:, 1]) > 90):
+            raise ValueError(f"geoms[{i}] requires finite coordinates and latitudes within [-90, 90]")
+        if not geom.is_valid:
+            raise ValueError(f"geoms[{i}] is invalid: {shapely.is_valid_reason(geom)}")
+        result[i] = EARTH_RADIUS_M**2 * _polygon_area_steradians(geom)
+    return result
+
+
+def _polygon_area_steradians(geometry: shapely.Geometry) -> float:
+    """Accumulate polygon components without depending on ring orientation."""
+    pending = [geometry]
+    areas = []
+    while pending:
+        part = pending.pop()
+        if part.is_empty:
+            continue
+        if isinstance(part, shapely.Polygon):
+            if part.bounds[2] - part.bounds[0] > 360:
+                raise ValueError("each polygon must span at most 360 degrees of longitude")
+            outer = abs(_lonlat_ring_integral(np.asarray(part.exterior.coords)))
+            holes = fsum(abs(_lonlat_ring_integral(np.asarray(ring.coords))) for ring in part.interiors)
+            areas.append(max(0.0, outer - holes))
+        elif isinstance(part, (shapely.MultiPolygon, shapely.GeometryCollection)):
+            pending.extend(part.geoms)
+    return fsum(areas)
+
+
+def _lonlat_ring_integral(coords: np.ndarray) -> float:
+    """Integrate sin(latitude) d(longitude) exactly along linear lon/lat edges.
+
+    For an edge with midpoint m and half latitude difference h, its mean sine
+    is sin(m) * sinc(h/pi). Subtracting a constant reference sine leaves the
+    closed-ring integral unchanged and avoids cancellation for small polygons.
+    """
+    latitudes = coords[:, 1]
+    reference = (latitudes.min() + latitudes.max()) / 2
+    offsets = np.deg2rad(latitudes - reference)
+    middle = (offsets[:-1] + offsets[1:]) / 2
+    half_step = np.deg2rad(np.diff(latitudes) / 2)
+    reference = np.deg2rad(reference)
+    # sinc(h/pi) - 1 loses its quadratic term for short edges. A local Taylor
+    # expansion retains it, including for tiny triangles near a pole.
+    h2 = half_step**2
+    correction = np.where(
+        np.abs(half_step) < 1e-3,
+        h2 * (-1 / 6 + h2 * (1 / 120 - h2 / 5040)),
+        np.sinc(half_step / np.pi) - 1,
+    )
+    mean_sine = (
+        2 * np.cos(reference + middle / 2) * np.sin(middle / 2)
+        + np.sin(reference + middle) * correction
+    )
+    return fsum(np.deg2rad(np.diff(coords[:, 0])) * mean_sine)
 
 
 def grid_digest(lats: np.ndarray, lons: np.ndarray) -> bytes:
