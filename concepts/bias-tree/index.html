@@ -1122,10 +1122,22 @@ transitively contribute to it</strong>:</p>
     c["muni_c"] --&gt; RJ
     SP --&gt; BR
     RJ --&gt; BR</code></pre>
-<p><code>BiasTree.compute</code> builds <span class="arithmatex">\(\mathbf{R}\)</span> bottom-up: it sorts nodes by depth, seeds leaf
-rows with identity, then for each internal node sums its children's already-built rows
-scaled by <code>w/total</code> (mean) or <code>w</code> (sum). Because children are always shallower than their
-parents, one pass suffices.</p>
+<p><code>BiasTree.compute</code> builds a sparse adjacency matrix <span class="arithmatex">\(\mathbf{A}\)</span>, with each
+parent–child entry set to <code>w/total</code> (mean) or <code>w</code> (sum), and a rectangular identity
+<span class="arithmatex">\(\mathbf{L}\)</span> that selects the leaves. Starting from <span class="arithmatex">\(\mathbf{R}_0=\mathbf{L}\)</span>,
+it computes</p>
+<div class="arithmatex">\[
+\mathbf{R}_{k+1} = \mathbf{L} + \mathbf{A}\,\mathbf{R}_k.
+\]</div>
+<p>Each sparse product propagates leaf contributions one edge toward the roots.
+After as many products as the maximum leaf-to-root depth, the matrix is complete,
+including leaves attached at different depths and disconnected trees (a forest).
+The iteration count comes from the validated hierarchy, not a floating-point
+convergence test. This avoids repeatedly copying and adding individual sparse
+rows. Build cost still depends on tree depth and the number of leaf–ancestor
+coefficients in the result; very deep chains need more products than shallow trees.</p>
+<p>Node ordering is unchanged: leaves sorted by <code>repr</code>, then internal nodes by
+depth and <code>repr</code>. Cache digests and payloads are unchanged as well.</p>
 <h2 id="usage">Usage<a class="headerlink" href="#usage" title="Permanent link">&para;</a></h2>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">geohalo</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ghl</span>

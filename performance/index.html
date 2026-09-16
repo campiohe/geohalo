@@ -925,6 +925,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Rollups">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tree-construction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tree construction
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1115,6 +1132,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Rollups">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tree-construction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tree construction
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1351,6 +1385,78 @@ blob, builds in ~0.5 s, and loads in ~0.5 ms — same answer, ~900× smaller.</p
 <p><a href="../concepts/bias-tree/">Hierarchical rollups</a> are another matmul. The full GADM Brazil
 muni → state hierarchy (5 571 leaves) rolls a batch of 50 slices up in ~5.6 ms; with a
 500-slice batch, ~19 ms.</p>
+<h3 id="tree-construction">Tree construction<a class="headerlink" href="#tree-construction" title="Permanent link">&para;</a></h3>
+<p>The synthetic benchmark for <a href="https://github.com/campiohe/geohalo/issues/8">#8</a>
+compares the previous row-by-row builder with the depth-bounded sparse builder:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>benchmarks.bias_tree_build
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>benchmarks.bias_tree_build<span class="w"> </span>--leaves<span class="w"> </span><span class="m">5570</span><span class="w"> </span>--fanout<span class="w"> </span><span class="m">10</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>benchmarks.bias_tree_build<span class="w"> </span>--leaves<span class="w"> </span><span class="m">20000</span><span class="w"> </span>--fanout<span class="w"> </span><span class="m">10</span><span class="w"> </span>--repeats<span class="w"> </span><span class="m">1</span>
+</span></code></pre></div>
+<p>Local measurements of complete builds, including validation, ordering, matrix
+assembly, and hashing (but excluding synthetic hierarchy generation). The first
+two tree sizes use medians of three builds; the largest uses one build per mode:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Leaves</th>
+<th style="text-align: right;">Internal nodes</th>
+<th>Mode</th>
+<th style="text-align: right;">Previous build</th>
+<th style="text-align: right;">Sparse build</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">2,862</td>
+<td style="text-align: right;">25</td>
+<td>weighted mean</td>
+<td style="text-align: right;">1.015 s</td>
+<td style="text-align: right;">0.022 s</td>
+</tr>
+<tr>
+<td style="text-align: right;">2,862</td>
+<td style="text-align: right;">25</td>
+<td>weighted sum</td>
+<td style="text-align: right;">1.092 s</td>
+<td style="text-align: right;">0.013 s</td>
+</tr>
+<tr>
+<td style="text-align: right;">5,573</td>
+<td style="text-align: right;">620</td>
+<td>weighted mean</td>
+<td style="text-align: right;">2.905 s</td>
+<td style="text-align: right;">0.055 s</td>
+</tr>
+<tr>
+<td style="text-align: right;">5,573</td>
+<td style="text-align: right;">620</td>
+<td>weighted sum</td>
+<td style="text-align: right;">3.201 s</td>
+<td style="text-align: right;">0.034 s</td>
+</tr>
+<tr>
+<td style="text-align: right;">20,003</td>
+<td style="text-align: right;">2,223</td>
+<td>weighted mean</td>
+<td style="text-align: right;">30.307 s</td>
+<td style="text-align: right;">0.194 s</td>
+</tr>
+<tr>
+<td style="text-align: right;">20,003</td>
+<td style="text-align: right;">2,223</td>
+<td>weighted sum</td>
+<td style="text-align: right;">29.787 s</td>
+<td style="text-align: right;">0.142 s</td>
+</tr>
+</tbody>
+</table>
+<p>The benchmark checks exact equality of CSR coefficients, indices, row pointers,
+node keys, and cache digests for both modes. Each hierarchy includes three leaves
+attached directly to the root, exercising unequal leaf depths. Build cost depends
+on depth and the number of contributing leaf–ancestor pairs, not just leaf count.</p>
+<p>Environment: Python 3.14.4, NumPy 2.4.6, pandas 3.0.3, SciPy 1.17.1, Intel Core
+Ultra 5 125H in a Linux virtual machine. Timings vary with machine load; these are
+synthetic build measurements, separate from the historical GADM hot-path timings.</p>
 <h2 id="caveats">Caveats<a class="headerlink" href="#caveats" title="Permanent link">&para;</a></h2>
 <p>Numbers are point-in-time on the author's machine and vary ±20 % by hardware. Cold-import
 overhead (~0.3 s for <code>import geohalo</code>) is excluded — the suite measures steady-state cost.
