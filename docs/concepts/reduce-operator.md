@@ -85,11 +85,34 @@ op = cache.get_or_compute_reduce_operator(
 out = ghl.reduce_with_operator(da, op)     # (..., geom); also accepts how="sum"
 ```
 
-!!! warning "Clean data only"
-    `reduce_with_operator` assumes non-NaN, unweighted data — the fused operator bakes
-    in a fixed normaliser and cannot renormalise per cell. For missing values or
-    per-cell weights, use [`reduce_with_stencil`](masked.md), which keeps the resampler
-    factored and renormalises each slice.
+### Opt-in source-cell NaN handling
+
+Contributing NaNs propagate by default, preserving existing behavior. Pass
+`skipna=True` to omit missing **source** cells and renormalize each mean over
+the surviving signed weights:
+
+```python
+out = ghl.reduce_with_operator(da, op, skipna=True)
+totals = ghl.reduce_with_operator(da, op, how="sum", skipna=True)
+```
+
+An all-missing zone has a NaN mean and a zero sum. Means also return NaN when
+the surviving signed weight is zero or negative. Only NaNs are excluded;
+infinities are not treated as missing. Sums retain the original weights and
+do not extrapolate the total over missing area.
+
+Without resampling, this agrees with the unweighted masked stencil path.
+With fused resampling, it is a **different operation** from resampling first
+and then masking target cells. Negative resampling coefficients are retained:
+a positive surviving denominator does not guarantee a bounded or well-conditioned
+mean, especially if signed weights nearly cancel. No clipping is applied.
+For target-cell masking or per-cell weights, use
+[`reduce_with_stencil`](masked.md).
+
+The same opt-in is available on `reduce_with_restricted_operator` and
+`RestrictedOperator.apply`. Low-level callers can use
+`op.apply_grid(values, how="mean", skipna=True)`; `apply_grid` still defaults
+to an unnormalized sum, unlike the higher-level reducers.
 
 ## Application memory
 
@@ -99,6 +122,12 @@ sparse-vector product per batch slice. The compact column mapping is prepared
 once per operator instance and reused, including across Dataset variables.
 Operators that touch most cells use the full source slice. Small contiguous grids
 use bounded batches to keep multiplication overhead low.
+
+NaN-aware application processes one slice at a time. Clean slices use the
+cached normalizer and one sparse product; a masked mean uses a second product
+for its denominator. Masked sums still need only one. Masks and sanitized
+values are temporary per-slice arrays, never full-batch copies. Enabling this
+option does not change operator digests or require rebuilding caches.
 
 Temporary dense storage therefore depends on one slice's contributing cells,
 rather than the total number of slices. The original matrix coefficient order

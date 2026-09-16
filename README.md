@@ -110,6 +110,11 @@ Already have your own reader? Pass its NumPy window arrays, in plan order, to
 `restricted.gather(arrays)`, then `restricted.apply(gathered, how="mean")`.
 No xarray objects or Dask scheduling are needed for this path.
 
+Prebuilt reducers and `restricted.apply` accept `skipna=True` to omit missing
+source cells and renormalize means. NaNs still propagate by default. When
+resampling is fused, source-cell masking differs from the stencil path's
+resample-then-mask behavior; see [NaN handling](https://campiohe.github.io/geohalo/concepts/masked/).
+
 ## Documentation
 
 Everything is covered in depth at **<https://campiohe.github.io/geohalo/>**:
