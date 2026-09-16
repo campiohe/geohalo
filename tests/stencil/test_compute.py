@@ -27,7 +27,7 @@ def simple_geoms() -> gpd.GeoSeries:
 def test_compute_shape(grid_lats, grid_lons, simple_geoms) -> None:
     s = Stencil.compute(grid_lats, grid_lons, simple_geoms)
     assert s.occupancy_matrix.shape == (2, 30)
-    assert list(s.keys) == ["multi", "sub"]
+    assert list(s.keys) == ["sub", "multi"]
 
 
 def test_row_sums_positive(grid_lats, grid_lons, simple_geoms) -> None:
@@ -58,6 +58,9 @@ def test_input_order_invariant(grid_lats, grid_lons) -> None:
     s1 = Stencil.compute(grid_lats, grid_lons, gpd.GeoSeries([a, b], index=["a", "b"]))
     s2 = Stencil.compute(grid_lats, grid_lons, gpd.GeoSeries([b, a], index=["b", "a"]))
     assert s1.digest == s2.digest
+    assert list(s2.keys) == ["b", "a"]
+    np.testing.assert_array_equal(s2.occupancy_matrix.toarray(), s1.occupancy_matrix.toarray()[::-1])
+    np.testing.assert_array_equal(s2.row_sums, s1.row_sums[::-1])
 
 
 def test_not_geoseries_raises(grid_lats, grid_lons) -> None:

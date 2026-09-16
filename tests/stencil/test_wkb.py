@@ -83,9 +83,10 @@ def test_wkb_matches_geojson_matrix_and_digest(spherical, descending, multiindex
     lat, lon = np.arange(-2.0, 3.0), np.arange(-2.0, 3.0)
     geoms = _geoms(multiindex, crs)
     expected_keys, expected = _geojson_matrix(lat, lon, geoms, spherical)
+    expected = expected[expected_keys.get_indexer(geoms.index)]
     source_lat = lat[::-1] if descending else lat
     stencil = Stencil.compute(source_lat, lon, geoms, spherical_correction=spherical)
-    pd.testing.assert_index_equal(stencil.keys, expected_keys)
+    pd.testing.assert_index_equal(stencil.keys, geoms.index)
     np.testing.assert_array_equal(stencil.occupancy_matrix.indptr, expected.indptr)
     np.testing.assert_array_equal(stencil.occupancy_matrix.indices, expected.indices)
     np.testing.assert_array_equal(stencil.occupancy_matrix.data, expected.data)
@@ -148,8 +149,9 @@ def test_preexisting_stencil_cache_entry_is_reused(tmp_path, monkeypatch):
     monkeypatch.setattr(Stencil, "compute", no_build)
     cached = cache.get_or_compute_stencil(lat[::-1], lat, geoms.iloc[::-1])
     assert cached.digest == digest
-    pd.testing.assert_index_equal(cached.keys, keys)
-    np.testing.assert_array_equal(cached.occupancy_matrix.toarray(), matrix.toarray())
+    requested = geoms.iloc[::-1].index
+    pd.testing.assert_index_equal(cached.keys, requested)
+    np.testing.assert_array_equal(cached.occupancy_matrix.toarray(), matrix[keys.get_indexer(requested)].toarray())
 
 
 def test_wkb_empty_overlap_reports_original_key():

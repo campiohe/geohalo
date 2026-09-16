@@ -95,6 +95,7 @@ class Stencil:
         *,
         spherical_correction: bool = True,
     ) -> "Stencil":
+        """Build rows in ``geoms`` order; keep a canonical, order-independent digest."""
         if not isinstance(geoms, gpd.GeoSeries):
             raise TypeError(f"geoms must be a gpd.GeoSeries, got {type(geoms).__name__}")
         if len(geoms) == 0:
@@ -104,23 +105,22 @@ class Stencil:
         require_regular_grid(lats_asc, "latitude")
         require_regular_grid(lons_arr, "longitude")
 
-        order = np.argsort([repr(k) for k in geoms.index])
-        sorted_geoms = geoms.iloc[order]
-        if sorted_geoms.isna().any():
+        if geoms.isna().any():
             # exactextract's native WKB reader cannot safely handle a null geometry.
             raise ValueError("geoms contains missing geometries; expected polygons")
-        wkb = shapely.to_wkb(sorted_geoms.to_numpy())
+        wkb = shapely.to_wkb(geoms.to_numpy())
 
         matrix = _build_occupancy_matrix(
-            lats_asc, lons_arr, sorted_geoms.index, wkb, spherical_correction=spherical_correction,
+            lats_asc, lons_arr, geoms.index, wkb, spherical_correction=spherical_correction,
         )
+        order = np.argsort([repr(k) for k in geoms.index])
         digest = _stencil_digest_from_geometry_digest(
-            lats_asc, lons_arr, _geom_digest_from_wkb(sorted_geoms.index, wkb),
+            lats_asc, lons_arr, _geom_digest_from_wkb(geoms.index.take(order), wkb[order]),
             spherical_correction=spherical_correction,
         )
         return cls(
             occupancy_matrix=matrix,
-            keys=sorted_geoms.index,
+            keys=geoms.index,
             lats=lats_asc,
             lons=lons_arr,
             digest=digest,
