@@ -77,8 +77,10 @@ def test_real_refined_operator_includes_resampling_halo(iterations, how):
     )
 
 
-def _lazy_grid(operator, descending):
+def _lazy_grid(operator, descending, *, missing=False):
     eager = make_grid(operator, descending=descending, batch_shape=(5,))
+    if missing:
+        eager.values[..., 7 if descending else 0, 1] = np.nan
     chunks = ((2, 2, 1), (3, 1, 4), (2, 3, 1, 4))
     edges = [np.cumsum((0, *sizes)) for sizes in chunks]
     reads = []
@@ -102,13 +104,14 @@ def _lazy_grid(operator, descending):
 
 
 @pytest.mark.parametrize("descending", [False, True])
-def test_dask_reads_each_touched_chunk_once_and_no_others(descending):
+@pytest.mark.parametrize("skipna", [False, True])
+def test_dask_reads_each_touched_chunk_once_and_no_others(descending, skipna):
     operator = make_operator()
-    eager, lazy, reads = _lazy_grid(operator, descending)
+    eager, lazy, reads = _lazy_grid(operator, descending, missing=skipna)
     plan = RestrictedOperator.from_grid(operator, lazy)
     assert reads == []
-    got = reduce_with_restricted_operator(lazy, plan)
-    xr.testing.assert_identical(got, reduce_with_operator(eager, operator))
+    got = reduce_with_restricted_operator(lazy, plan, skipna=skipna)
+    xr.testing.assert_identical(got, reduce_with_operator(eager, operator, skipna=skipna))
     row, col = np.divmod(operator.matrix.indices, 10)
     if descending:
         row = 7 - row

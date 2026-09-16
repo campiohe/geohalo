@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from geohalo._sparse import projection_dtype
 from geohalo.bias_tree import BiasTree
 from geohalo.geometry import ensure_ascending_lats, same_grid, target_coords_from_resolution
 from geohalo.reduce_operator import ReduceOperator
@@ -132,14 +133,19 @@ def reduce_with_operator[T: xr.DataArray | xr.Dataset](
     operator: ReduceOperator,
     *,
     how: Literal["mean", "sum"] = "mean",
+    skipna: bool = False,
     lat_dim: str = "latitude",
     lon_dim: str = "longitude",
     geom_dim: str = "geom",
 ) -> T:
     """Reduce ``grid`` to per-polygon values using the fused source-grid operator.
 
-    Assumes clean (non-NaN, unweighted) data — the fused operator cannot
-    renormalise per cell. For NaN or per-cell weighting, use ``reduce_with_stencil``.
+    By default, contributing NaNs propagate. ``skipna=True`` omits missing
+    source cells and renormalizes means over their surviving signed weights;
+    nonpositive denominators return NaN. Sums omit missing contributions,
+    returning zero when all are missing. With fused resampling, source masking
+    differs from resample-then-mask and negative weights can cause overshoots.
+    For target-cell masking or per-cell weights, use ``reduce_with_stencil``.
     Large grids gather contributing cells per batch slice, retaining the
     operator's precision without copying or upcasting the entire batch.
     """
@@ -148,7 +154,9 @@ def reduce_with_operator[T: xr.DataArray | xr.Dataset](
     if isinstance(grid, xr.Dataset):
         return _map_spatial_vars(
             grid,
-            lambda da: reduce_with_operator(da, operator, how=how, lat_dim=lat_dim, lon_dim=lon_dim, geom_dim=geom_dim),
+            lambda da: reduce_with_operator(
+                da, operator, how=how, skipna=skipna, lat_dim=lat_dim, lon_dim=lon_dim, geom_dim=geom_dim,
+            ),
             lat_dim,
             lon_dim,
         )
@@ -163,9 +171,7 @@ def reduce_with_operator[T: xr.DataArray | xr.Dataset](
         )
     batch_dims = [d for d in grid.dims if d not in (lat_dim, lon_dim)]
     arr = grid.transpose(*batch_dims, lat_dim, lon_dim).to_numpy()
-    proj = operator.apply_grid(arr, descending=descending)
-    if how == "mean":
-        proj = proj / operator.row_sums
+    proj = operator.apply_grid(arr, descending=descending, how=how, skipna=skipna)
     return xr.DataArray(
         proj,
         dims=(*batch_dims, geom_dim),
@@ -211,11 +217,12 @@ def reduce_with_restricted_operator[T: xr.DataArray | xr.Dataset](
     operator: RestrictedOperator,
     *,
     how: Literal["mean", "sum"] = "mean",
+    skipna: bool = False,
     lat_dim: str = "latitude",
     lon_dim: str = "longitude",
     geom_dim: str = "geom",
 ) -> T:
-    """Reduce clean data, reading only the plan's contributing spatial chunks.
+    """Reduce data, reading only the plan's contributing spatial chunks.
 
     Returns an eager result, preserving batch coordinates, names, and attrs.
     Each batch chunk is processed separately; only one spatial window and its
@@ -225,8 +232,11 @@ def reduce_with_restricted_operator[T: xr.DataArray | xr.Dataset](
     Coordinates must match the plan's stored latitude order and longitude grid.
     Known spatial chunk layouts must also match; rebuild the plan after changing
     either. Dataset variables without both spatial dimensions pass through.
-    As with ``reduce_with_operator``, NaNs and per-cell weights require the
-    separate ``reduce_with_stencil`` path, especially when resampling is fused.
+    NaNs propagate by default. ``skipna=True`` omits missing source cells,
+    renormalizing means over surviving signed weights (NaN if nonpositive).
+    Sums omit missing contributions, returning zero if all are missing. With
+    fused resampling this is not resample-then-mask. Per-cell weights and
+    target-cell masking still require ``reduce_with_stencil``.
     """
     if how not in ("mean", "sum"):
         raise ValueError(f"how must be 'mean' or 'sum', got {how!r}")
@@ -234,7 +244,7 @@ def reduce_with_restricted_operator[T: xr.DataArray | xr.Dataset](
         return _map_spatial_vars(
             grid,
             lambda da: reduce_with_restricted_operator(
-                da, operator, how=how, lat_dim=lat_dim, lon_dim=lon_dim, geom_dim=geom_dim,
+                da, operator, how=how, skipna=skipna, lat_dim=lat_dim, lon_dim=lon_dim, geom_dim=geom_dim,
             ),
             lat_dim, lon_dim,
         )
@@ -248,7 +258,8 @@ def reduce_with_restricted_operator[T: xr.DataArray | xr.Dataset](
 
     batch_dims = [dim for dim in grid.dims if dim not in (lat_dim, lon_dim)]
     batch_shape = tuple(grid.sizes[dim] for dim in batch_dims)
-    dtype = np.result_type(grid.dtype, operator.matrix.dtype)
+    row_sums = operator.row_sums if how == "mean" else None
+    dtype = projection_dtype(grid.dtype, operator.matrix.dtype, row_sums)
     out = np.zeros((*batch_shape, len(operator.keys)), dtype=dtype)
     if operator.matrix.shape[1]:
         def read_windows(selection: dict[str, slice]) -> Iterator[np.ndarray]:
@@ -262,10 +273,11 @@ def reduce_with_restricted_operator[T: xr.DataArray | xr.Dataset](
         for index in _restricted_batch_slices(grid, batch_dims, operator):
             selection = dict(zip(batch_dims, index, strict=True))
             gathered = operator.gather(read_windows(selection))
-            out[index] = operator.apply(gathered, how="sum")
+            out[index] = operator.apply(gathered, how=how, skipna=skipna)
             del gathered
-    if how == "mean":
-        out = out / operator.row_sums
+    elif out.size:
+        # No source cells are read, but preserve mean/empty-denominator semantics.
+        out[...] = operator.apply(np.empty(0, dtype=grid.dtype), how=how, skipna=skipna)
     return xr.DataArray(
         out, dims=(*batch_dims, geom_dim),
         coords={**_carryover_coords(grid, batch_dims), geom_dim: _geom_coord(operator.keys, geom_dim)},
