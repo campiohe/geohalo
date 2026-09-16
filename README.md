@@ -89,7 +89,8 @@ out_fine = ghl.reduce(da, geoms, target_resolution=0.05)   # refine the grid fir
 
 The output preserves every non-spatial dim of `da` (time, ensemble member,
 band, vertical level, …) and replaces `(latitude, longitude)` with a single
-`geom` dim indexed by the GeoSeries keys.
+`geom` dim indexed by the GeoSeries keys, in the order you supplied them.
+Stencil and operator matrix rows follow that same order, including cache hits.
 
 `reduce` also accepts an `xr.Dataset` (every spatial data var is reduced),
 `how={"mean", "sum"}`, a `weight_key` naming a per-cell weight variable, and

@@ -46,8 +46,9 @@ The digests are also carefully **canonical**:
   canonical grid operators (latitudes are sorted before hashing). A
   [`RestrictedOperator`](../concepts/restricted-operator.md) instead hashes the
   stored orientation because its read windows depend on that order;
-- the polygon digest is **order-invariant** (keys are sorted, then `(repr(key),
-  WKB(geom))` pairs are hashed), so the order you pass geometries in doesn't matter;
+- the polygon digest is **order-invariant** for uniquely keyed polygons (keys
+  are sorted, then `(repr(key), WKB(geom))` pairs are hashed), so reordering those
+  polygons reuses the same cache entry;
 - the spherical flag is mixed in as `b"sph"` / `b"flat"` so a corrected and an
   uncorrected stencil never collide.
 
@@ -55,6 +56,19 @@ Geometry hashing uses vectorised WKB encoding. During stencil construction, the
 same encoded bytes are reused for extraction and hashing. The digest byte format
 is unchanged from the previous GeoJSON extraction path, so existing stencil and
 dependent reduce-operator cache entries remain valid.
+
+`Stencil`, `ReduceOperator`, and `RestrictedOperator` payloads store canonical
+row order. Their cache methods return **caller-ordered** objects: stencil rows
+follow `geoms.index`, fused rows follow `stencil.keys`, and restricted rows follow
+`operator.keys`. Cache hits permute sparse rows, normalizers, and labels together;
+they never rerun geometry extraction, fusion, or read-plan construction. Existing
+sorted payloads work without migration. A digest identifies the canonical
+operator, not its returned row layout; use `keys` to interpret matrix rows.
+
+Duplicate labels remain distinct positional rows. Their existing hashing
+behavior is unchanged: permuting different geometries with the same label can
+produce a different digest. Use unique keys when sharing entries across arbitrary
+polygon permutations.
 
 ## Backends
 
