@@ -96,6 +96,14 @@ Stencil and operator matrix rows follow that same order, including cache hits.
 `how={"mean", "sum"}`, a `weight_key` naming a per-cell weight variable, and
 `spherical_correction=False` to disable the latitude-area correction.
 
+For global grids, set `period=360` on `resample_grid`, `reduce`, or the
+resampler/fused-operator builder to interpolate across the longitude seam.
+Resolution-based calls then generate one full longitude cycle; explicit target
+arrays remain unchanged. The default `period=None` still clamps at the edges.
+Do not repeat the source endpoint (e.g. include −180° but not also +180°).
+This wraps sampling, not polygon geometries. See
+[periodic longitude](https://campiohe.github.io/geohalo/guides/resampling/#periodic-longitude).
+
 For clean lazy grids, opt into chunk-aware reads with a precomputed fused operator:
 
 ```python

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Add opt-in longitude periodicity with `period=360`
+  ([#22](https://github.com/campiohe/geohalo/issues/22)). Linear interpolation
+  and nearest-parent assignment wrap together in materialized/factored
+  resamplers, fused reductions, and local/Redis caches. With `period` set,
+  resolution-based helpers generate a full longitude cycle without a repeated
+  endpoint; explicit target arrays retain their coordinates and order.
+  Nonperiodic defaults and cache keys are unchanged. Restricted plans inherit
+  seam-crossing coefficients and read only contributing chunks. This does not
+  wrap polygon geometries or add conservative regridding.
+
 - Add opt-in `dtype=np.float32` to `Stencil.compute`, `ReduceOperator.compute`,
   and their LocalCache/RedisCache methods, plus `preserve_dtype=True` on all
   polygon reducers, `ReduceOperator.apply_grid`, and `RestrictedOperator.apply`

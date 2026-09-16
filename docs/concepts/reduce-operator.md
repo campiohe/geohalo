@@ -89,6 +89,13 @@ Matrix rows, `row_sums`, and output values follow `stencil.keys`, which preserve
 the caller's polygon order. Cache hits return that same requested order even
 when another caller populated the entry in a different order.
 
+For a global source, pass `period=360` to `ReduceOperator.compute` or
+`cache.get_or_compute_reduce_operator`. Fusion uses cyclic longitude interpolation
+and parent assignment; applying the resulting operator needs no extra flag.
+Restricted plans inherit its seam-crossing halo and cache identity. The stencil
+grid and polygons themselves are unchanged; see
+[periodic longitude](../guides/resampling.md#periodic-longitude).
+
 ### Coefficient and result dtypes
 
 Storage precision and result dtype are independent, opt-in choices:

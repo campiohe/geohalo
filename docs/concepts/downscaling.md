@@ -49,7 +49,7 @@ From the source and target coordinate arrays, geohalo builds three
 
 - \(\mathbf{B}\) — **bilinear interpolation**, target ← source. Separable as
   \(\mathbf{B} = \mathbf{B}_\text{lat} \otimes \mathbf{B}_\text{lon}\), each 1-D factor
-  mapping source centres to target centres with clamped edges
+  mapping source centres to target centres with clamped edges by default
   (`bilinear_matrix_1d`).
 - \(\pi\) — a **nearest-cell assignment** of each target cell to its parent source cell
   (`nearest_index`). From it:
@@ -57,6 +57,12 @@ From the source and target coordinate arrays, geohalo builds three
     - \(\mathbf{A}\) — source ← target **mean**: \(A_{s,t} = 1/n_s\) when
       \(\pi(t) = s\), where \(n_s\) is the number of target cells assigned to source
       cell \(s\). A source cell with no children has an all-zero row.
+
+With `period=360`, both the longitude factor of \(\mathbf{B}\) and longitude
+parent assignment wrap at the seam. Latitude remains clamped, and the same
+mean-preservation proof applies to these cyclic parents. See
+[periodic longitude](../guides/resampling.md#periodic-longitude) for source
+validation, full-cycle target generation, and polygon-coordinate limitations.
 
 The refinement is an **interpolate-and-correct** loop, linear in the source values
 \(\mathbf{x}\):
