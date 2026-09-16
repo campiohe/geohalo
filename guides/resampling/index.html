@@ -1150,10 +1150,19 @@ the fine grid:</p>
 </span></code></pre></div>
 <h2 id="handling-descending-latitudes">Handling descending latitudes<a class="headerlink" href="#handling-descending-latitudes" title="Permanent link">&para;</a></h2>
 <p>ECMWF and many GRIB products ship latitudes <strong>descending</strong> (90 → −90). geohalo's
-resampler handles this transparently: <code>bilinear_matrix_1d</code> and <code>nearest_index</code> sort the
-source axis ascending for the lookup and map indices back to the caller's ordering, and
-the apply helpers <code>sortby</code> the latitude dim first. You do not need to flip anything
-yourself.</p>
+<code>Resampler.compute</code> and <code>FactoredResampler.compute</code> canonicalise source latitudes
+to ascending order when building their matrices. The xarray apply helpers reorder
+descending input data to match, so you do not need to flip anything yourself.
+Ascending and descending versions of the same source grid share one cache entry.</p>
+<p><code>resample_grid_with_matrix</code> checks both latitude and longitude coordinates against
+the resampler's source grid and raises <code>ValueError</code> on a mismatch, even when the
+grid shapes are identical. Target coordinates keep the order supplied when the
+resampler was built.</p>
+<p>If you multiply <code>Resampler.transform_matrix</code> directly, or call
+<code>FactoredResampler.apply_flat</code>, flatten source values with <strong>ascending latitude</strong>
+and longitude in <code>source_lon</code> order. This corrects the convention in 1.1.0, where
+matrices built from descending latitudes expected descending values, causing the
+xarray helpers to flip north and south.</p>
 
 
 

@@ -1637,6 +1637,10 @@ renormalise per cell. For NaN or per-cell weighting, use <code>reduce_with_stenc
 
     <div class="doc doc-contents first">
 
+        <p>Resample a matching source grid, accepting either latitude orientation.</p>
+<p>Raises <code>ValueError</code> if the source coordinates differ from the resampler's
+source grid. Output coordinates follow the resampler's target order.</p>
+
 
     </div>
 
@@ -1806,6 +1810,11 @@ renormalise per cell. For NaN or per-cell weighting, use <code>reduce_with_stenc
     <div class="doc doc-contents first">
 
 
+
+        <p>Grid transform whose source columns use ascending latitude, then longitude.</p>
+<p>Target rows retain the supplied coordinate order. Direct matrix callers must
+flatten source values in <code>(source_lat, source_lon)</code> order; the xarray API
+handles descending source latitudes automatically.</p>
 
 
 
