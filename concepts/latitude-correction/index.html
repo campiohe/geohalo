@@ -578,6 +578,56 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#polygon-areas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Polygon areas
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Polygon areas">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#edge-convention-and-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Edge convention and integration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#longitude-and-input-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Longitude and input validation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#comparing-with-stencil-weights" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparing with stencil weights
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1119,6 +1169,56 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#polygon-areas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Polygon areas
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Polygon areas">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#edge-convention-and-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Edge convention and integration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#longitude-and-input-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Longitude and input validation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#comparing-with-stencil-weights" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparing with stencil weights
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1201,6 +1301,62 @@ non-goal.</p>
 the precompute, so it costs nothing at apply time. The <code>spherical_correction</code> flag is
 also mixed into the stencil's <a href="../../guides/caching/">cache digest</a> (<code>b"sph"</code> vs
 <code>b"flat"</code>), so a spherical stencil and a planar one never collide in the cache.</p>
+<h2 id="polygon-areas">Polygon areas<a class="headerlink" href="#polygon-areas" title="Permanent link">&para;</a></h2>
+<p>Use <code>geohalo.geometry.polygon_areas</code> to measure zones with the same spherical
+surface element and radius as <code>cell_areas</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">geohalo.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">polygon_areas</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">shapely</span><span class="w"> </span><span class="kn">import</span> <span class="n">box</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># A GeoSeries or one-dimensional sequence, in longitude/latitude degrees.</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">area_m2</span> <span class="o">=</span> <span class="n">polygon_areas</span><span class="p">([</span><span class="n">box</span><span class="p">(</span><span class="o">-</span><span class="mi">10</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">50</span><span class="p">)])</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="c1"># With a GeoSeries, the output positions follow its order, including duplicate keys:</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="c1"># area_m2 = polygon_areas(geoms)</span>
+</span></code></pre></div>
+<p>The result is a one-dimensional float64 NumPy array, not an indexed Series.
+<code>None</code> produces NaN. Empty geometries, points, and lines have zero area. Polygon
+holes are subtracted regardless of winding direction. MultiPolygon and nested
+GeometryCollection members contribute additively; collections are not unioned
+and overlapping members can therefore be counted more than once. Z is ignored.</p>
+<h3 id="edge-convention-and-integration">Edge convention and integration<a class="headerlink" href="#edge-convention-and-integration" title="Permanent link">&para;</a></h3>
+<p>Edges are straight in the supplied longitude/latitude coordinate plane, consistent
+with <a href="https://shapely.readthedocs.io/en/stable/manual.html#coordinate-systems">Shapely's coordinate model</a>.
+They are not great-circle arcs, and this is not an ellipsoidal geodesic area.
+For each ring we use the spherical surface integral as a boundary integral:</p>
+<div class="arithmatex">\[
+A_{\rm ring} = R^2\left|\oint \sin\varphi\,d\lambda\right|.
+\]</div>
+<p>For a linear edge, let <span class="arithmatex">\(m=(\varphi_0+\varphi_1)/2\)</span> and
+<span class="arithmatex">\(h=(\varphi_1-\varphi_0)/2\)</span>. Its integral is
+<span class="arithmatex">\(\Delta\lambda\sin(m)\sin(h)/h\)</span>, with the ratio defined as 1 when
+<span class="arithmatex">\(h=0\)</span>. Thus both horizontal and sloping edges are integrated analytically;
+adding collinear vertices does not change the geometric area. The implementation
+subtracts a reference sine and uses a small-angle expansion to reduce floating-point
+cancellation for small or near-pole polygons.</p>
+<h3 id="longitude-and-input-validation">Longitude and input validation<a class="headerlink" href="#longitude-and-input-validation" title="Permanent link">&para;</a></h3>
+<p>Longitudes are used as supplied, <strong>without wrapping</strong> or selecting a shorter arc.
+<code>box(-170, -10, 170, 10)</code> covers 340 degrees of longitude, not 20. For a narrow
+antimeridian-crossing polygon, unwrap its coordinates (for example, a box from
+170 to 190) or split it into polygons on either side of the seam. Each polygon
+must span at most 360 degrees; a full globe such as <code>box(-180, -90, 180, 90)</code>
+has area <span class="arithmatex">\(4\pi R^2\)</span>. This helper does not alter the longitude handling of
+stencils or reducers.</p>
+<p>Coordinates must be finite, latitude must lie in [-90, 90], and geometries must
+be topologically valid. Invalid data raises <code>ValueError</code> rather than being repaired
+or clipped. Non-geometry elements raise <code>TypeError</code>. A GeoSeries with a declared
+CRS must use EPSG:4326 or an equivalent CRS (such as OGC:CRS84); unlabelled inputs
+are assumed to contain lon/lat degrees. No reprojection is performed. For planar
+area in coordinate units, use <code>shapely.area</code> instead.</p>
+<h3 id="comparing-with-stencil-weights">Comparing with stencil weights<a class="headerlink" href="#comparing-with-stencil-weights" title="Permanent link">&para;</a></h3>
+<p><code>polygon_areas(geoms)</code> and a spherical stencil's <code>row_sums</code> are expressed in the
+same m² and use the same radius, but they need not be numerically identical.
+Stencil weights multiply <strong>planar coverage fractions</strong> by whole-cell spherical
+areas. That approximates the spherical area of partially covered cells. A polygon
+made entirely of whole grid cells agrees with their summed areas; a partial-cell
+boundary generally does not, even if the polygon is a lat/lon rectangle.</p>
+<p>The stencil also only includes the portion inside its grid footprint. Ratios
+against <code>polygon_areas</code> are therefore approximate coverage diagnostics, not an
+exact coverage fraction guaranteed to lie in [0, 1]. This helper leaves existing
+stencil construction and reduction results unchanged.</p>
 
 
 

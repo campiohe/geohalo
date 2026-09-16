@@ -1378,6 +1378,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#geometry-areas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Geometry areas
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Geometry areas">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#geohalo.geometry.polygon_areas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        polygon_areas
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#geohalo.geometry.cell_areas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        cell_areas
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#exceptions" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1824,6 +1863,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#geometry-areas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Geometry areas
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Geometry areas">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#geohalo.geometry.polygon_areas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        polygon_areas
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#geohalo.geometry.cell_areas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        cell_areas
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#exceptions" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1872,8 +1950,8 @@
 
 
 <h1 id="api-reference">API reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h1>
-<p>The public surface is everything exported from the top-level <code>geohalo</code> package. Each
-entry point comes in a <strong>convenience</strong> form (builds the operator for you) and a
+<p>High-level entry points are exported from the top-level <code>geohalo</code> package. Each
+workflow comes in a <strong>convenience</strong> form (builds the operator for you) and a
 <strong>precomputed</strong> form (you pass a cached object).</p>
 <table>
 <thead>
@@ -2890,6 +2968,72 @@ changed by this grid-resampling option.</p>
 
 
   </div>
+
+    </div>
+
+</div><hr />
+<h2 id="geometry-areas">Geometry areas<a class="headerlink" href="#geometry-areas" title="Permanent link">&para;</a></h2>
+<p>These helpers live in <code>geohalo.geometry</code>. See
+<a href="../concepts/latitude-correction/#polygon-areas">latitude correction</a> for the
+coordinate convention and the distinction between polygon areas and stencil weights.</p>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="geohalo.geometry.polygon_areas" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">geohalo.geometry.polygon_areas</span>
+
+
+<a href="#geohalo.geometry.polygon_areas" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">polygon_areas</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">geoms</span><span class="p">:</span> <span class="n">GeoSeries</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Geometry</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="n">ndarray</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents first">
+
+        <p>Spherical areas in m², using the same radius as :func:<code>cell_areas</code>.</p>
+<p>Accept a GeoSeries or a one-dimensional sequence of Shapely geometries in
+longitude/latitude degrees. Return a float64 array in input order, without
+index labels. Missing geometries return NaN; empty geometries and non-area
+geometries return zero. Polygon holes are subtracted and multipart or
+collection areas are added (not unioned). Z coordinates are ignored.</p>
+<p>Edges are straight segments in the supplied lon/lat coordinates, not
+geodesics. Integration is analytic, including sloped edges. Longitudes
+are NOT wrapped: a box from -170 to 170 spans 340 degrees, while a narrow
+seam-crossing box can use 170 to 190, or be split at the antimeridian.
+Each polygon must span at most 360 degrees. Full-globe boxes are supported.</p>
+<p>Coordinates must be finite, latitudes within [-90, 90], and geometries
+topologically valid. Invalid inputs raise ValueError; non-geometries raise
+TypeError. A GeoSeries CRS, when set, must be EPSG:4326 (or equivalent).
+No reprojection, repair, clipping, or longitude unwrapping is performed.</p>
+<p>Stencil weights use planar cell-coverage fractions times spherical cell
+areas. They share these units and radius, but only approximate this area
+in partially covered cells. For planar areas, use Shapely's <code>area</code>.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="geohalo.geometry.cell_areas" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">geohalo.geometry.cell_areas</span>
+
+
+<a href="#geohalo.geometry.cell_areas" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">cell_areas</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">lats</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span> <span class="n">lons</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">spherical</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents first">
+
+        <p>Per-cell area. spherical=True → m²; spherical=False → all 1.0.</p>
+
 
     </div>
 
