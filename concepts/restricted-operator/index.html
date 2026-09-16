@@ -1144,7 +1144,9 @@ contribute to the polygons.</p>
 <p>This is an explicit chunk-aware path for unweighted inputs, with an <strong>eager</strong>
 xarray result. Contributing NaNs propagate by default; <code>skipna=True</code> opts into
 source-cell masking. Names, attrs, scalar and batch coordinates, and polygon
-MultiIndex keys are preserved.</p>
+MultiIndex keys are preserved. Matrix rows and results follow <code>op.keys</code>, retaining
+the caller's polygon order even on cache hits; window order is independent of
+polygon row order.</p>
 <h2 id="what-the-plan-contains">What the plan contains<a class="headerlink" href="#what-the-plan-contains" title="Permanent link">&para;</a></h2>
 <ol>
 <li>The nonzero columns of the fused operator, including any resampling halo.</li>

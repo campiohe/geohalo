@@ -1201,6 +1201,9 @@ matrix directly on the source grid:</p>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="p">)</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">out</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce_with_operator</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">op</span><span class="p">)</span>     <span class="c1"># (..., geom); also accepts how=&quot;sum&quot;</span>
 </span></code></pre></div>
+<p>Matrix rows, <code>row_sums</code>, and output values follow <code>stencil.keys</code>, which preserves
+the caller's polygon order. Cache hits return that same requested order even
+when another caller populated the entry in a different order.</p>
 <h3 id="opt-in-source-cell-nan-handling">Opt-in source-cell NaN handling<a class="headerlink" href="#opt-in-source-cell-nan-handling" title="Permanent link">&para;</a></h3>
 <p>Contributing NaNs propagate by default, preserving existing behavior. Pass
 <code>skipna=True</code> to omit missing <strong>source</strong> cells and renormalize each mean over

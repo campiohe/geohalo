@@ -1093,6 +1093,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Stencil">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#geohalo.Stencil.compute" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
           <li class="md-nav__item">
@@ -1488,6 +1505,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Stencil">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#geohalo.Stencil.compute" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
         
@@ -2025,6 +2059,36 @@ source grid. Output coordinates follow the resampler's target order.</p>
 
 
 
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="geohalo.Stencil.compute" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">compute</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-classmethod"><code>classmethod</code></small>
+  </span>
+
+<a href="#geohalo.Stencil.compute" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">compute</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">lats</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">lons</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">geoms</span><span class="p">:</span> <span class="n">GeoSeries</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="o">*</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">spherical_correction</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Stencil</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Build rows in <code>geoms</code> order; keep a canonical, order-independent digest.</p>
+
+
+    </div>
+
+</div>
 
 
 
