@@ -670,10 +670,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#limitations" class="md-nav__link">
+  <a href="#missing-values-and-limitations" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Limitations
+        Missing values and limitations
       
     </span>
   </a>
@@ -1093,10 +1093,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#limitations" class="md-nav__link">
+  <a href="#missing-values-and-limitations" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Limitations
+        Missing values and limitations
       
     </span>
   </a>
@@ -1141,9 +1141,10 @@ contribute to the polygons.</p>
 </span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="n">out</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce_with_restricted_operator</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">restricted</span><span class="p">)</span>  <span class="c1"># (..., geom)</span>
 </span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="n">totals</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce_with_restricted_operator</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">restricted</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;sum&quot;</span><span class="p">)</span>
 </span></code></pre></div>
-<p>The existing entry points are unchanged. This is an explicit, opt-in path for
-clean (non-NaN, unweighted) inputs, with an <strong>eager</strong> xarray result. Names, attrs,
-scalar and batch coordinates, and polygon MultiIndex keys are preserved.</p>
+<p>This is an explicit chunk-aware path for unweighted inputs, with an <strong>eager</strong>
+xarray result. Contributing NaNs propagate by default; <code>skipna=True</code> opts into
+source-cell masking. Names, attrs, scalar and batch coordinates, and polygon
+MultiIndex keys are preserved.</p>
 <h2 id="what-the-plan-contains">What the plan contains<a class="headerlink" href="#what-the-plan-contains" title="Permanent link">&para;</a></h2>
 <ol>
 <li>The nonzero columns of the fused operator, including any resampling halo.</li>
@@ -1176,7 +1177,8 @@ batch shapes. It selects cells in the compact matrix's column order. The result
 keeps the input dtype; mixed window dtypes use NumPy's common dtype. <code>apply</code>
 preserves the existing sparse arithmetic precision and divides by <code>row_sums</code>
 for means, so float32 inputs still normally produce float64 results. Neither
-method changes the input arrays or introduces missing-data renormalization.</p>
+method changes the input arrays. Missing-data renormalization is opt-in via
+<code>restricted.apply(gathered, skipna=True)</code>.</p>
 <p>You can read concurrently, provided the resulting arrays retain the plan's
 window order. Alternatively, pass a generator to <code>gather</code> to read and release
 one window at a time:</p>
@@ -1249,12 +1251,24 @@ normalized spatial chunk sizes. Unlike the canonical fused operator, ascending
 and descending read plans have different digests. Regular integer chunk sizes
 and equivalent explicit tuples share a cache entry. Batch sizes/chunks and grid
 values are not part of the key. Existing operator cache formats are unchanged.</p>
-<h2 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h2>
-<p>NaN handling and per-cell weights still use
-<a href="../masked/"><code>reduce_with_stencil</code></a>. Renormalizing a fused matrix on source cells
-is not generally equivalent to resampling first and masking target cells, so this
-path does not silently introduce different missing-data semantics. It also does
-not return a deferred Dask result or distribute reductions across workers.</p>
+<h2 id="missing-values-and-limitations">Missing values and limitations<a class="headerlink" href="#missing-values-and-limitations" title="Permanent link">&para;</a></h2>
+<p>The xarray and NumPy entry points share the same opt-in:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">out</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce_with_restricted_operator</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">restricted</span><span class="p">,</span> <span class="n">skipna</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">means</span> <span class="o">=</span> <span class="n">restricted</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">gathered</span><span class="p">,</span> <span class="n">skipna</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">totals</span> <span class="o">=</span> <span class="n">restricted</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">gathered</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;sum&quot;</span><span class="p">,</span> <span class="n">skipna</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Missing source cells are excluded from means' numerators and denominators.
+Means with no positive surviving signed weight return NaN; sums omit missing
+contributions and return zero if all are missing. Clean slices need one sparse
+product; only masked means need a second. Masks are formed on gathered cells,
+one batch slice at a time. There is no extra I/O or full-grid NaN scan, and the
+plan/cache does not depend on this apply-time option.</p>
+<p>Renormalizing a fused matrix on source cells is not generally equivalent to
+resampling first and masking target cells. Signed resampling weights can cause
+overshoots and unstable means near cancellation; this option does not clip them.
+Use <a href="../masked/"><code>reduce_with_stencil</code></a> for target-cell masking or per-cell weights.
+These entry points do not return deferred Dask results or distribute reductions
+across workers.</p>
 <p>For measured read counts, transferred payload, and memory, see
 <a href="../../performance/#chunk-aware-reads">performance</a>.</p>
 

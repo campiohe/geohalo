@@ -617,6 +617,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="ReduceOperator">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#opt-in-source-cell-nan-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Opt-in source-cell NaN handling
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1057,6 +1074,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="ReduceOperator">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#opt-in-source-cell-nan-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Opt-in source-cell NaN handling
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1167,13 +1201,28 @@ matrix directly on the source grid:</p>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="p">)</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">out</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce_with_operator</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">op</span><span class="p">)</span>     <span class="c1"># (..., geom); also accepts how=&quot;sum&quot;</span>
 </span></code></pre></div>
-<div class="admonition warning">
-<p class="admonition-title">Clean data only</p>
-<p><code>reduce_with_operator</code> assumes non-NaN, unweighted data — the fused operator bakes
-in a fixed normaliser and cannot renormalise per cell. For missing values or
-per-cell weights, use <a href="../masked/"><code>reduce_with_stencil</code></a>, which keeps the resampler
-factored and renormalises each slice.</p>
-</div>
+<h3 id="opt-in-source-cell-nan-handling">Opt-in source-cell NaN handling<a class="headerlink" href="#opt-in-source-cell-nan-handling" title="Permanent link">&para;</a></h3>
+<p>Contributing NaNs propagate by default, preserving existing behavior. Pass
+<code>skipna=True</code> to omit missing <strong>source</strong> cells and renormalize each mean over
+the surviving signed weights:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">out</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce_with_operator</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">op</span><span class="p">,</span> <span class="n">skipna</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">totals</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce_with_operator</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">op</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;sum&quot;</span><span class="p">,</span> <span class="n">skipna</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span></code></pre></div>
+<p>An all-missing zone has a NaN mean and a zero sum. Means also return NaN when
+the surviving signed weight is zero or negative. Only NaNs are excluded;
+infinities are not treated as missing. Sums retain the original weights and
+do not extrapolate the total over missing area.</p>
+<p>Without resampling, this agrees with the unweighted masked stencil path.
+With fused resampling, it is a <strong>different operation</strong> from resampling first
+and then masking target cells. Negative resampling coefficients are retained:
+a positive surviving denominator does not guarantee a bounded or well-conditioned
+mean, especially if signed weights nearly cancel. No clipping is applied.
+For target-cell masking or per-cell weights, use
+<a href="../masked/"><code>reduce_with_stencil</code></a>.</p>
+<p>The same opt-in is available on <code>reduce_with_restricted_operator</code> and
+<code>RestrictedOperator.apply</code>. Low-level callers can use
+<code>op.apply_grid(values, how="mean", skipna=True)</code>; <code>apply_grid</code> still defaults
+to an unnormalized sum, unlike the higher-level reducers.</p>
 <h2 id="application-memory">Application memory<a class="headerlink" href="#application-memory" title="Permanent link">&para;</a></h2>
 <p><code>reduce_with_operator</code> reads values in their stored latitude order. For large
 grids, it gathers the source cells referenced by the matrix and applies one
@@ -1181,6 +1230,11 @@ sparse-vector product per batch slice. The compact column mapping is prepared
 once per operator instance and reused, including across Dataset variables.
 Operators that touch most cells use the full source slice. Small contiguous grids
 use bounded batches to keep multiplication overhead low.</p>
+<p>NaN-aware application processes one slice at a time. Clean slices use the
+cached normalizer and one sparse product; a masked mean uses a second product
+for its denominator. Masked sums still need only one. Masks and sanitized
+values are temporary per-slice arrays, never full-batch copies. Enabling this
+option does not change operator digests or require rebuilding caches.</p>
 <p>Temporary dense storage therefore depends on one slice's contributing cells,
 rather than the total number of slices. The original matrix coefficient order
 and float64 precision are preserved, including for float32 input. Canonical
