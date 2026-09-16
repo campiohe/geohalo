@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## 2.0.0 — 2026-09-16
+
+### Migration from 1.2.0
+
+- **Polygon row order:** stencil/operator rows and reduction results now follow
+  caller order, including cache hits. Remove permutations that undid the old
+  `repr(key)` sorting, or sort the input GeoSeries first to retain sorted output.
+  `BiasTree` ordering and label-based alignment are unchanged.
+- **Cache format:** local `.pkl` entries and legacy Redis prefixes are ignored
+  and rebuilt using versioned, non-pickle NPZ artifacts. Old entries are neither
+  loaded nor deleted automatically; expect a one-time rebuild. Custom key types
+  that cannot be encoded safely now fail explicitly. See
+  [portable artifacts and migration](https://campiohe.github.io/geohalo/concepts/serialization/).
+- Existing mean-preserving resampling, float64 coefficients, dtype promotion,
+  and NaN propagation remain defaults. Conservative regridding, periodic
+  longitude, float32 coefficients, dtype preservation, and NaN skipping are opt-in.
+
+### Changes
+
 - Add `geohalo.geometry.polygon_areas` for zone areas in m² on the same sphere
   as `cell_areas` ([#21](https://github.com/campiohe/geohalo/issues/21)). Integrates
   straight lon/lat edges analytically, including sloped edges, holes, multipart
@@ -19,8 +38,7 @@
   structure; cache hits also check the full input digest. **Cache migration:**
   LocalCache now uses `.npz` files and Redis uses `:npz:v1:` prefixes. Legacy
   entries are ignored and rebuilt, never automatically loaded or deleted.
-  This format change supersedes payload-compatibility notes below; build-input
-  digests remain unchanged. Unsupported custom key types fail explicitly.
+  Build-input digests remain unchanged. Unsupported custom key types fail explicitly.
 
 - Add `method="conservative"` to `Resampler.compute`, `resample_grid`, and
   local/Redis resampler caches ([#15](https://github.com/campiohe/geohalo/issues/15)).
@@ -30,8 +48,8 @@
   `skipna=True` support covered/valid-area means. Unmapped cells return NaN.
   Supports explicit cell bounds, singleton axes with bounds, descending axes,
   polar clipping, and periodic longitude. Default mean-preserving calls and
-  their existing cache keys/payloads remain compatible; conservative cache
-  payloads store the two factors. Fused polygon reduction is unchanged.
+  their input digests are unchanged; conservative NPZ artifacts store the two
+  factors. Fused polygon reduction is unchanged.
 
 - Add opt-in longitude periodicity with `period=360`
   ([#22](https://github.com/campiohe/geohalo/issues/22)). Linear interpolation
@@ -40,8 +58,8 @@
   resolution-based helpers generate a full longitude cycle without a repeated
   endpoint; explicit target arrays retain their coordinates and order.
   Nonperiodic defaults and cache keys are unchanged. Restricted plans inherit
-  seam-crossing coefficients and read only contributing chunks. This does not
-  wrap polygon geometries or add conservative regridding.
+  seam-crossing coefficients and read only contributing chunks. Periodic
+  interpolation does not wrap polygon geometries.
 
 - Add opt-in `dtype=np.float32` to `Stencil.compute`, `ReduceOperator.compute`,
   and their LocalCache/RedisCache methods, plus `preserve_dtype=True` on all
@@ -49,15 +67,15 @@
   ([#19](https://github.com/campiohe/geohalo/issues/19)). Float32 coefficients
   reduce storage while row normalizers remain float64. Floating-point results
   can retain each input variable's dtype; integer means remain floating-point.
-  Existing float64 defaults, cache keys/payload formats, and NaN semantics are
+  Existing float64 defaults, input digests, and NaN semantics are
   unchanged. Float32 operators use separate cache keys; restricted plans inherit
   coefficient dtype. Reduced precision is opt-in, not an accuracy guarantee.
 
 - Preserve the caller's polygon order in `Stencil.compute`, reduction matrix
   rows, and NumPy/xarray reduction outputs
   ([#18](https://github.com/campiohe/geohalo/issues/18)). Local and Redis caches
-  store canonical rows and restore the requested order, keeping existing
-  digests and payloads valid. **Compatibility:** outputs no longer sort polygon
+  store canonical rows and restore the requested order, keeping input digests
+  order-invariant for unique keys. **Compatibility:** outputs no longer sort polygon
   keys; remove any positional permutation previously used to undo that sort.
   To retain the previous order, sort the input GeoSeries by `repr(key)` first.
   `BiasTree` node order is unchanged; xarray aggregation aligns leaves by key.
@@ -68,7 +86,7 @@
   Means renormalize over surviving source-cell weights and return NaN for
   nonpositive denominators; sums omit missing contributions (zero if all are
   missing). Masks are bounded per slice, and restricted reads do not change.
-  Default NaN propagation, cache formats, and the stencil path's
+  Default NaN propagation and the stencil path's
   resample-then-mask semantics are unchanged.
 
 - Add `RestrictedOperator.gather` and `RestrictedOperator.apply` for reducing
@@ -76,7 +94,7 @@
   ([#17](https://github.com/campiohe/geohalo/issues/17)). Window iterators support
   one-window-at-a-time gathering; the xarray adapter shares the same array
   methods. Mean/sum arithmetic, dtype promotion, and NaN propagation are
-  unchanged. No new dependencies or cache-format changes.
+  unchanged. No new dependencies.
 
 ## 1.2.0 — 2026-09-16
 
