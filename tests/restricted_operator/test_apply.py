@@ -105,13 +105,17 @@ def _lazy_grid(operator, descending, *, missing=False):
 
 @pytest.mark.parametrize("descending", [False, True])
 @pytest.mark.parametrize("skipna", [False, True])
-def test_dask_reads_each_touched_chunk_once_and_no_others(descending, skipna):
+@pytest.mark.parametrize("preserve_dtype", [False, True])
+def test_dask_reads_each_touched_chunk_once_and_no_others(descending, skipna, preserve_dtype):
     operator = make_operator()
     eager, lazy, reads = _lazy_grid(operator, descending, missing=skipna)
     plan = RestrictedOperator.from_grid(operator, lazy)
     assert reads == []
-    got = reduce_with_restricted_operator(lazy, plan, skipna=skipna)
-    xr.testing.assert_identical(got, reduce_with_operator(eager, operator, skipna=skipna))
+    got = reduce_with_restricted_operator(lazy, plan, skipna=skipna, preserve_dtype=preserve_dtype)
+    xr.testing.assert_identical(
+        got, reduce_with_operator(eager, operator, skipna=skipna, preserve_dtype=preserve_dtype),
+    )
+    assert got.dtype == (np.float32 if preserve_dtype else np.float64)
     row, col = np.divmod(operator.matrix.indices, 10)
     if descending:
         row = 7 - row

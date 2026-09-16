@@ -16,6 +16,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
+from numpy.typing import DTypeLike
 
 try:
     import redis
@@ -297,14 +298,15 @@ class _Cache:
         geoms: gpd.GeoSeries,
         *,
         spherical_correction: bool = True,
+        dtype: DTypeLike = np.float64,
         force_recompute: bool = False,
     ) -> Stencil:
-        digest = stencil_digest(lats, lons, geoms, spherical_correction=spherical_correction)
+        digest = stencil_digest(lats, lons, geoms, spherical_correction=spherical_correction, dtype=dtype)
         return self._get_or_compute_rows(
             "stencil",
             digest,
             geoms.index,
-            lambda: Stencil.compute(lats, lons, geoms, spherical_correction=spherical_correction),
+            lambda: Stencil.compute(lats, lons, geoms, spherical_correction=spherical_correction, dtype=dtype),
             _ser_stencil,
             _deser_stencil,
             force_recompute,
@@ -356,14 +358,15 @@ class _Cache:
         source_lon: np.ndarray,
         *,
         iterations: int = 1,
+        dtype: DTypeLike = np.float64,
         force_recompute: bool = False,
     ) -> ReduceOperator:
-        digest = reduce_operator_digest(stencil.digest, source_lat, source_lon, iterations)
+        digest = reduce_operator_digest(stencil.digest, source_lat, source_lon, iterations, dtype=dtype)
         return self._get_or_compute_rows(
             "reduceop",
             digest,
             stencil.keys,
-            lambda: ReduceOperator.compute(stencil, source_lat, source_lon, iterations=iterations),
+            lambda: ReduceOperator.compute(stencil, source_lat, source_lon, iterations=iterations, dtype=dtype),
             _ser_reduce_op,
             _deser_reduce_op,
             force_recompute,

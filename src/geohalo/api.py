@@ -134,6 +134,7 @@ def reduce_with_operator[T: xr.DataArray | xr.Dataset](
     *,
     how: Literal["mean", "sum"] = "mean",
     skipna: bool = False,
+    preserve_dtype: bool = False,
     lat_dim: str = "latitude",
     lon_dim: str = "longitude",
     geom_dim: str = "geom",
@@ -148,6 +149,8 @@ def reduce_with_operator[T: xr.DataArray | xr.Dataset](
     For target-cell masking or per-cell weights, use ``reduce_with_stencil``.
     Large grids gather contributing cells per batch slice, retaining the
     operator's precision without copying or upcasting the entire batch.
+    ``preserve_dtype=True`` retains each floating input variable's dtype in the
+    result, without lowering matrix precision. Integer means remain floating.
     """
     if how not in ("mean", "sum"):
         raise ValueError(f"how must be 'mean' or 'sum', got {how!r}")
@@ -155,7 +158,8 @@ def reduce_with_operator[T: xr.DataArray | xr.Dataset](
         return _map_spatial_vars(
             grid,
             lambda da: reduce_with_operator(
-                da, operator, how=how, skipna=skipna, lat_dim=lat_dim, lon_dim=lon_dim, geom_dim=geom_dim,
+                da, operator, how=how, skipna=skipna, preserve_dtype=preserve_dtype,
+                lat_dim=lat_dim, lon_dim=lon_dim, geom_dim=geom_dim,
             ),
             lat_dim,
             lon_dim,
@@ -171,7 +175,7 @@ def reduce_with_operator[T: xr.DataArray | xr.Dataset](
         )
     batch_dims = [d for d in grid.dims if d not in (lat_dim, lon_dim)]
     arr = grid.transpose(*batch_dims, lat_dim, lon_dim).to_numpy()
-    proj = operator.apply_grid(arr, descending=descending, how=how, skipna=skipna)
+    proj = operator.apply_grid(arr, descending=descending, how=how, skipna=skipna, preserve_dtype=preserve_dtype)
     return xr.DataArray(
         proj,
         dims=(*batch_dims, geom_dim),
@@ -218,6 +222,7 @@ def reduce_with_restricted_operator[T: xr.DataArray | xr.Dataset](
     *,
     how: Literal["mean", "sum"] = "mean",
     skipna: bool = False,
+    preserve_dtype: bool = False,
     lat_dim: str = "latitude",
     lon_dim: str = "longitude",
     geom_dim: str = "geom",
@@ -237,6 +242,8 @@ def reduce_with_restricted_operator[T: xr.DataArray | xr.Dataset](
     Sums omit missing contributions, returning zero if all are missing. With
     fused resampling this is not resample-then-mask. Per-cell weights and
     target-cell masking still require ``reduce_with_stencil``.
+    ``preserve_dtype=True`` retains each floating input variable's result dtype;
+    integer inputs keep normal promotion, including floating-point means.
     """
     if how not in ("mean", "sum"):
         raise ValueError(f"how must be 'mean' or 'sum', got {how!r}")
@@ -244,7 +251,8 @@ def reduce_with_restricted_operator[T: xr.DataArray | xr.Dataset](
         return _map_spatial_vars(
             grid,
             lambda da: reduce_with_restricted_operator(
-                da, operator, how=how, skipna=skipna, lat_dim=lat_dim, lon_dim=lon_dim, geom_dim=geom_dim,
+                da, operator, how=how, skipna=skipna, preserve_dtype=preserve_dtype,
+                lat_dim=lat_dim, lon_dim=lon_dim, geom_dim=geom_dim,
             ),
             lat_dim, lon_dim,
         )
@@ -259,7 +267,7 @@ def reduce_with_restricted_operator[T: xr.DataArray | xr.Dataset](
     batch_dims = [dim for dim in grid.dims if dim not in (lat_dim, lon_dim)]
     batch_shape = tuple(grid.sizes[dim] for dim in batch_dims)
     row_sums = operator.row_sums if how == "mean" else None
-    dtype = projection_dtype(grid.dtype, operator.matrix.dtype, row_sums)
+    dtype = projection_dtype(grid.dtype, operator.matrix.dtype, row_sums, preserve_dtype=preserve_dtype)
     out = np.zeros((*batch_shape, len(operator.keys)), dtype=dtype)
     if operator.matrix.shape[1]:
         def read_windows(selection: dict[str, slice]) -> Iterator[np.ndarray]:
@@ -273,11 +281,11 @@ def reduce_with_restricted_operator[T: xr.DataArray | xr.Dataset](
         for index in _restricted_batch_slices(grid, batch_dims, operator):
             selection = dict(zip(batch_dims, index, strict=True))
             gathered = operator.gather(read_windows(selection))
-            out[index] = operator.apply(gathered, how=how, skipna=skipna)
+            out[index] = operator.apply(gathered, how=how, skipna=skipna, preserve_dtype=preserve_dtype)
             del gathered
     elif out.size:
         # No source cells are read, but preserve mean/empty-denominator semantics.
-        out[...] = operator.apply(np.empty(0, dtype=grid.dtype), how=how, skipna=skipna)
+        out[...] = operator.apply(np.empty(0, dtype=grid.dtype), how=how, skipna=skipna, preserve_dtype=preserve_dtype)
     return xr.DataArray(
         out, dims=(*batch_dims, geom_dim),
         coords={**_carryover_coords(grid, batch_dims), geom_dim: _geom_coord(operator.keys, geom_dim)},
@@ -295,7 +303,14 @@ def reduce_with_stencil[T: xr.DataArray | xr.Dataset](
     geom_dim: str = "geom",
     weight_key: str | None = None,
     how: Literal["mean", "sum"] = "mean",
+    preserve_dtype: bool = False,
 ) -> T:
+    """Reduce in stencil row order, automatically handling NaNs and cell weights.
+
+    ``preserve_dtype=True`` retains each floating input variable's result dtype;
+    integer means remain floating. Clean fusion uses the stencil's coefficient
+    dtype. Masked/weighted normalization retains its existing arithmetic precision.
+    """
     if how not in ("mean", "sum"):
         raise ValueError(f"how must be 'mean' or 'sum', got {how!r}")
     _require_spatial_dims(grid, lat_dim, lon_dim)
@@ -305,8 +320,12 @@ def reduce_with_stencil[T: xr.DataArray | xr.Dataset](
 
     # Clean path: build the fused operator once and delegate.
     if weight_key is None and not _any_spatial_nan(grid, lat_dim, lon_dim):
-        operator = ReduceOperator.compute(stencil, src_lat, src_lon, iterations=resample_iterations)
-        return reduce_with_operator(grid, operator, how=how, lat_dim=lat_dim, lon_dim=lon_dim, geom_dim=geom_dim)
+        operator = ReduceOperator.compute(
+            stencil, src_lat, src_lon, iterations=resample_iterations, dtype=stencil.occupancy_matrix.dtype,
+        )
+        return reduce_with_operator(
+            grid, operator, how=how, preserve_dtype=preserve_dtype, lat_dim=lat_dim, lon_dim=lon_dim, geom_dim=geom_dim,
+        )
 
     # Masked path: build the resampler once, project per variable with renormalisation.
     if same_grid(src_lat, src_lon, stencil.lats, stencil.lons):
@@ -318,11 +337,15 @@ def reduce_with_stencil[T: xr.DataArray | xr.Dataset](
     if isinstance(grid, xr.Dataset):
         return _map_spatial_vars(
             grid,
-            lambda da: _reduce_masked_da(da, stencil, resampler, weight_key, how, lat_dim, lon_dim, geom_dim, grid),
+            lambda da: _reduce_masked_da(
+                da, stencil, resampler, weight_key, how, lat_dim, lon_dim, geom_dim, grid, preserve_dtype,
+            ),
             lat_dim,
             lon_dim,
         )
-    return _reduce_masked_da(grid, stencil, resampler, weight_key, how, lat_dim, lon_dim, geom_dim, grid)
+    return _reduce_masked_da(
+        grid, stencil, resampler, weight_key, how, lat_dim, lon_dim, geom_dim, grid, preserve_dtype,
+    )
 
 
 def _any_spatial_nan(grid: xr.DataArray | xr.Dataset, lat_dim: str, lon_dim: str) -> bool:
@@ -374,6 +397,7 @@ def _reduce_masked_da(
     lon_dim: str,
     geom_dim: str,
     weight_source: xr.DataArray | xr.Dataset,
+    preserve_dtype: bool,
 ) -> xr.DataArray:
     _require_spatial_dims(da, lat_dim, lon_dim)
     lat = da[lat_dim].to_numpy()
@@ -383,7 +407,15 @@ def _reduce_masked_da(
     arr = da.transpose(*batch_dims, lat_dim, lon_dim).to_numpy()
     flat = arr.reshape(-1, arr.shape[-2] * arr.shape[-1])
     weight_flat = _resolve_weight_flat(da, weight_source, weight_key, lat_dim, lon_dim, batch_dims, resampler)
-    out_flat = _project_masked(flat, weight_flat, stencil, resampler, how)
+    if preserve_dtype and arr.dtype.kind == "f":
+        # Normalize into the requested dtype one slice at a time, without a
+        # full-batch float64 result or resampled intermediate to cast afterward.
+        out_flat = np.empty((flat.shape[0], len(stencil.keys)), dtype=arr.dtype)
+        for i in range(flat.shape[0]):
+            weights = None if weight_flat is None else weight_flat[i:i + 1]
+            out_flat[i] = _project_masked(flat[i:i + 1], weights, stencil, resampler, how)[0]
+    else:
+        out_flat = _project_masked(flat, weight_flat, stencil, resampler, how)
     out = out_flat.reshape(*arr.shape[:-2], len(stencil.keys))
     return xr.DataArray(
         out,
@@ -420,7 +452,7 @@ def _resolve_weight_flat(
     return w_flat
 
 
-def reduce[T: xr.DataArray | xr.Dataset](
+def reduce[T: xr.DataArray | xr.Dataset](  # noqa: PLR0913 - preserve the public keyword API
     grid: T,
     geoms: gpd.GeoSeries,
     *,
@@ -432,7 +464,14 @@ def reduce[T: xr.DataArray | xr.Dataset](
     geom_dim: str = "geom",
     weight_key: str | None = None,
     how: Literal["mean", "sum"] = "mean",
+    preserve_dtype: bool = False,
 ) -> T:
+    """Build a float64 stencil and reduce polygons in caller order.
+
+    ``preserve_dtype=True`` retains each floating input variable's result dtype;
+    integer means remain floating. For float32 coefficients, prebuild a stencil
+    or operator with ``dtype=np.float32`` and use its corresponding reducer.
+    """
     src_lat = grid[lat_dim].to_numpy()
     src_lon = grid[lon_dim].to_numpy()
     if target_resolution is None:
@@ -443,7 +482,7 @@ def reduce[T: xr.DataArray | xr.Dataset](
     return reduce_with_stencil(
         grid, stencil, resample_iterations=resample_iterations,
         lat_dim=lat_dim, lon_dim=lon_dim, geom_dim=geom_dim,
-        weight_key=weight_key, how=how,
+        weight_key=weight_key, how=how, preserve_dtype=preserve_dtype,
     )
 
 

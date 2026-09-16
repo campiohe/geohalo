@@ -12,7 +12,9 @@ import shapely
 from exactextract import exact_extract
 from exactextract.feature import Feature, FeatureSource
 from exactextract.raster import NumPyRasterSource
+from numpy.typing import DTypeLike
 
+from geohalo._sparse import cast_matrix, operator_dtype
 from geohalo.geometry import (
     _geom_digest_from_wkb,
     cell_areas,
@@ -76,7 +78,15 @@ class Stencil:
     row_sums: np.ndarray = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
-        row_sums = np.asarray(self.occupancy_matrix.sum(axis=1)).ravel()
+        matrix = self.occupancy_matrix
+        if matrix.dtype == np.float32:
+            # CSR.sum(dtype=float64) may cast only AFTER float32 accumulation.
+            # Reduce stored coefficients in float64 without a float64 matrix copy.
+            row_sums = np.zeros(matrix.shape[0], dtype=np.float64)
+            nonempty = np.diff(matrix.indptr) > 0
+            row_sums[nonempty] = np.add.reduceat(matrix.data, matrix.indptr[:-1][nonempty], dtype=np.float64)
+        else:
+            row_sums = np.asarray(matrix.sum(axis=1)).ravel()
         object.__setattr__(self, "row_sums", row_sums)
 
     def __repr__(self) -> str:
@@ -94,8 +104,15 @@ class Stencil:
         geoms: gpd.GeoSeries,
         *,
         spherical_correction: bool = True,
+        dtype: DTypeLike = np.float64,
     ) -> "Stencil":
-        """Build rows in ``geoms`` order; keep a canonical, order-independent digest."""
+        """Build caller-ordered rows with float64 (default) or float32 coefficients.
+
+        Geometry calculations use float64 before casting stored coefficients.
+        Row sums accumulate those stored weights in float64. Coordinates remain
+        float64; dtype is part of the canonical digest, with old float64 keys intact.
+        """
+        dtype = operator_dtype(dtype)
         if not isinstance(geoms, gpd.GeoSeries):
             raise TypeError(f"geoms must be a gpd.GeoSeries, got {type(geoms).__name__}")
         if len(geoms) == 0:
@@ -116,10 +133,10 @@ class Stencil:
         order = np.argsort([repr(k) for k in geoms.index])
         digest = _stencil_digest_from_geometry_digest(
             lats_asc, lons_arr, _geom_digest_from_wkb(geoms.index.take(order), wkb[order]),
-            spherical_correction=spherical_correction,
+            spherical_correction=spherical_correction, dtype=dtype,
         )
         return cls(
-            occupancy_matrix=matrix,
+            occupancy_matrix=cast_matrix(matrix, dtype),
             keys=geoms.index,
             lats=lats_asc,
             lons=lons_arr,
@@ -177,17 +194,19 @@ def stencil_digest(
     geoms: gpd.GeoSeries,
     *,
     spherical_correction: bool = True,
+    dtype: DTypeLike = np.float64,
 ) -> bytes:
     """Cache key for a stencil, derivable from inputs without building it.
 
     Canonicalises latitudes to ascending so a grid and its flipped twin hash
     identically; ``geom_digest`` is order-invariant, so geometry order does not
     matter either.
+    Coefficient dtype distinguishes entries; float64 retains existing keys.
     """
     lats_asc, _ = ensure_ascending_lats(lats)
     lons_arr = np.asarray(lons, dtype=np.float64)
     return _stencil_digest_from_geometry_digest(
-        lats_asc, lons_arr, geom_digest(geoms), spherical_correction=spherical_correction,
+        lats_asc, lons_arr, geom_digest(geoms), spherical_correction=spherical_correction, dtype=dtype,
     )
 
 
@@ -197,10 +216,14 @@ def _stencil_digest_from_geometry_digest(
     geometry_digest: bytes,
     *,
     spherical_correction: bool,
+    dtype: DTypeLike = np.float64,
 ) -> bytes:
     """Combine canonical grid coordinates with an already-computed geometry digest."""
     h = hashlib.sha256()
     h.update(grid_digest(lats, lons))
     h.update(b"sph" if spherical_correction else b"flat")
     h.update(geometry_digest)
+    dtype = operator_dtype(dtype)
+    if dtype != np.float64:
+        h.update(b"dtype:" + dtype.name.encode())
     return h.digest()
