@@ -1,4 +1,5 @@
-import pickle as pk
+import io
+import json
 
 import numpy as np
 import pandas as pd
@@ -51,8 +52,11 @@ def test_force_recompute(tmp_path, monkeypatch):
 
 
 def test_unknown_payload_version_rejected():
-    with pytest.raises(ValueError, match="unsupported restricted-operator payload version"):
-        _deser_restricted_op(pk.dumps({"version": 100}))
+    output = io.BytesIO()
+    metadata = np.frombuffer(json.dumps({"format": "geohalo", "version": 100}).encode(), dtype=np.uint8)
+    np.savez(output, metadata=metadata)
+    with pytest.raises(ValueError, match="unsupported NPZ schema version"):
+        _deser_restricted_op(output.getvalue())
 
 
 @pytest.mark.redis

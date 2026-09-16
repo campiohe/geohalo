@@ -169,7 +169,8 @@ The digest includes the fused operator digest, **stored** coordinates, and
 normalized spatial chunk sizes. Unlike the canonical fused operator, ascending
 and descending read plans have different digests. Regular integer chunk sizes
 and equivalent explicit tuples share a cache entry. Batch sizes/chunks and grid
-values are not part of the key. Existing operator cache formats are unchanged.
+values are not part of the key. Plans use the same
+[portable NPZ format](serialization.md) as the other cached operators.
 
 ## Missing values and limitations
 

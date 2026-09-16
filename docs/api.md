@@ -42,6 +42,12 @@ entry point comes in a **convenience** form (builds the operator for you) and a
 
 ## Precomputed operators
 
+All five classes support `obj.to_npz() -> bytes` and
+`Class.from_npz(blob: bytes) -> Class`. These versioned, non-pickle artifacts can
+be stored independently of the built-in caches. See
+[portable operator artifacts](concepts/serialization.md) for supported keys,
+the array schema, validation, and migration from older caches.
+
 ::: geohalo.Stencil
 
 ::: geohalo.ReduceOperator

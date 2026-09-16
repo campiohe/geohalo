@@ -155,7 +155,8 @@ change the separate `skipna` behavior of prebuilt polygon reducers.
 `LocalCache.get_or_compute_resampler` and its Redis counterpart accept the same
 method, normalization, period, and bounds options. Cache hits restore the two
 axis factors without rebuilding; `skipna` is apply-time and does not change the
-key. Existing mean-preserving cache entries remain valid.
+key. Both methods use the [portable NPZ format](serialization.md); input digests
+are unchanged, while legacy pickle cache entries require a one-time rebuild.
 
 Conservative coefficients and real-valued results use float64. Work is bounded
 per batch slice, including missing-data masks and reversed/strided inputs; the

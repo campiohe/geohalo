@@ -159,7 +159,8 @@ Everything is covered in depth at **<https://campiohe.github.io/geohalo/>**:
   [mean-preserving downscaling](https://campiohe.github.io/geohalo/concepts/downscaling/) ·
   [the fused reduce operator](https://campiohe.github.io/geohalo/concepts/reduce-operator/) ·
   [NaN-aware & weighted reduction](https://campiohe.github.io/geohalo/concepts/masked/) ·
-  [hierarchical rollups](https://campiohe.github.io/geohalo/concepts/bias-tree/)
+  [hierarchical rollups](https://campiohe.github.io/geohalo/concepts/bias-tree/) ·
+  [portable NPZ artifacts](https://campiohe.github.io/geohalo/concepts/serialization/)
 - **Guides** —
   [caching the precompute](https://campiohe.github.io/geohalo/guides/caching/) ·
   [resampling grids](https://campiohe.github.io/geohalo/guides/resampling/)

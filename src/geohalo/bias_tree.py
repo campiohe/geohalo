@@ -10,9 +10,11 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sp
 
+from geohalo._serialization import NPZSerializable
+
 
 @dataclass(frozen=True)
-class BiasTree:
+class BiasTree(NPZSerializable):
     rollup_matrix: sp.csr_matrix
     keys: pd.Index
     digest: bytes

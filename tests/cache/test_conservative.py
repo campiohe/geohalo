@@ -1,4 +1,5 @@
-import pickle as pk
+import io
+import json
 
 import numpy as np
 import pytest
@@ -65,19 +66,25 @@ def test_method_normalization_bounds_and_period_distinguish_cache_keys(cache):
     np.testing.assert_array_equal(default.transform_matrix.toarray(), objects[0].transform_matrix.toarray())
 
 
-def test_old_payload_and_version_validation():
+def test_classic_npz_payload_and_version_validation():
     coords = np.arange(2.)
     classic = ghl.Resampler.compute(coords, coords, coords, coords)
-    payload = pk.loads(_ser_resampler(classic))
-    assert payload["version"] == 1
-    assert "axis_weights" not in payload
-    assert "normalization" not in payload
-    restored = _deser_resampler(pk.dumps(payload))
+    blob = _ser_resampler(classic)
+    with np.load(io.BytesIO(blob), allow_pickle=False) as archive:
+        payload = dict(archive)
+    metadata = json.loads(payload["metadata"].tobytes())
+    assert metadata["version"] == 1
+    assert metadata["method"] == "meanpreserving"
+    assert "latitude_data" not in payload
+    restored = _deser_resampler(blob)
     assert restored.method == "meanpreserving"
     assert restored.digest == classic.digest
-    payload["version"] = 999
-    with pytest.raises(ValueError, match="unsupported resampler payload version"):
-        _deser_resampler(pk.dumps(payload))
+    metadata["version"] = 999
+    payload["metadata"] = np.frombuffer(json.dumps(metadata).encode(), dtype=np.uint8)
+    output = io.BytesIO()
+    np.savez(output, **payload)
+    with pytest.raises(ValueError, match="unsupported NPZ schema version"):
+        _deser_resampler(output.getvalue())
 
 
 def test_malformed_grid_bounds_rejected():

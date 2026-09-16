@@ -6,7 +6,6 @@ backends share all of that logic in :class:`_Cache`; they differ only in the
 ``_load``/``_store`` storage primitives.
 """
 
-import pickle as pk
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
@@ -15,7 +14,6 @@ from typing import Literal
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-import scipy.sparse as sp
 from numpy.typing import DTypeLike
 
 try:
@@ -33,12 +31,11 @@ from geohalo.resampler import Resampler, resampler_digest
 from geohalo.restricted_operator import ChunkSizes, RestrictedOperator, restricted_operator_digest
 from geohalo.stencil import Stencil, stencil_digest
 
-STENCIL_PREFIX = "geohalo:stencil:v1"
-RESAMPLER_PREFIX = "geohalo:resampler:v1"
-TREE_PREFIX = "geohalo:tree:v1"
-REDUCE_OP_PREFIX = "geohalo:reduceop:v1"
-RESTRICTED_OP_PREFIX = "geohalo:restrictedop:v1"
-PAYLOAD_VERSION = 1
+STENCIL_PREFIX = "geohalo:stencil:npz:v1"
+RESAMPLER_PREFIX = "geohalo:resampler:npz:v1"
+TREE_PREFIX = "geohalo:tree:npz:v1"
+REDUCE_OP_PREFIX = "geohalo:reduceop:npz:v1"
+RESTRICTED_OP_PREFIX = "geohalo:restrictedop:npz:v1"
 
 # namespace -> Redis key prefix; LocalCache uses the namespace directly as a subdir.
 _REDIS_PREFIXES = {
@@ -50,182 +47,12 @@ _REDIS_PREFIXES = {
 }
 
 
-def _csr_payload(m: sp.csr_matrix) -> dict:
-    return {"data": m.data, "indices": m.indices, "indptr": m.indptr, "shape": m.shape}
-
-
-def _csr_from_payload(p: dict) -> sp.csr_matrix:
-    return sp.csr_matrix(
-        (np.asarray(p["data"]), np.asarray(p["indices"]), np.asarray(p["indptr"])),
-        shape=tuple(p["shape"]),
-    )
-
-
-def _index_payload(idx: pd.Index) -> dict:
-    return {"values": list(idx), "names": list(idx.names)}
-
-
-def _index_from_payload(p: dict) -> pd.Index:
-    names, values = p["names"], p["values"]
-    if len(names) > 1:
-        return pd.MultiIndex.from_tuples(values, names=names)
-    return pd.Index(values, name=names[0] if names else None, tupleize_cols=False)
-
-
-def _ser_stencil(s: Stencil) -> bytes:
-    return pk.dumps(
-        {
-            "version": PAYLOAD_VERSION,
-            "matrix": _csr_payload(s.occupancy_matrix),
-            "keys": _index_payload(s.keys),
-            "lats": s.lats,
-            "lons": s.lons,
-            "digest": s.digest,
-            "spherical_correction": s.spherical_correction,
-        },
-        protocol=pk.HIGHEST_PROTOCOL,
-    )
-
-
-def _deser_stencil(blob: bytes) -> Stencil:
-    p = pk.loads(blob)
-    if p.get("version") != PAYLOAD_VERSION:
-        raise ValueError(f"unsupported stencil payload version: {p.get('version')!r}")
-    return Stencil(
-        occupancy_matrix=_csr_from_payload(p["matrix"]),
-        keys=_index_from_payload(p["keys"]),
-        lats=np.asarray(p["lats"]),
-        lons=np.asarray(p["lons"]),
-        digest=p["digest"],
-        spherical_correction=p["spherical_correction"],
-    )
-
-
-def _ser_resampler(r: Resampler) -> bytes:
-    payload = {
-        "version": PAYLOAD_VERSION,
-        "source_lat": r.source_lat,
-        "source_lon": r.source_lon,
-        "target_lat": r.target_lat,
-        "target_lon": r.target_lon,
-        "digest": r.digest,
-    }
-    if r.axis_weights is None:
-        payload["matrix"] = _csr_payload(r.transform_matrix)
-    else:
-        payload.update(version=2, axis_weights=[_csr_payload(axis) for axis in r.axis_weights],
-                       normalization=r.normalization)
-    return pk.dumps(payload, protocol=pk.HIGHEST_PROTOCOL)
-
-
-def _deser_resampler(blob: bytes) -> Resampler:
-    p = pk.loads(blob)
-    if p.get("version") not in (PAYLOAD_VERSION, 2):
-        raise ValueError(f"unsupported resampler payload version: {p.get('version')!r}")
-    conservative = p["version"] == 2
-    return Resampler(
-        transform_matrix=None if conservative else _csr_from_payload(p["matrix"]),
-        source_lat=np.asarray(p["source_lat"]),
-        source_lon=np.asarray(p["source_lon"]),
-        target_lat=np.asarray(p["target_lat"]),
-        target_lon=np.asarray(p["target_lon"]),
-        digest=p["digest"],
-        axis_weights=tuple(_csr_from_payload(axis) for axis in p["axis_weights"]) if conservative else None,
-        normalization=p["normalization"] if conservative else "destination",
-    )
-
-
-def _ser_tree(t: BiasTree) -> bytes:
-    return pk.dumps(
-        {
-            "version": PAYLOAD_VERSION,
-            "matrix": _csr_payload(t.rollup_matrix),
-            "keys": _index_payload(t.keys),
-            "digest": t.digest,
-            "how": t.how,
-        },
-        protocol=pk.HIGHEST_PROTOCOL,
-    )
-
-
-def _deser_tree(blob: bytes) -> BiasTree:
-    p = pk.loads(blob)
-    if p.get("version") != PAYLOAD_VERSION:
-        raise ValueError(f"unsupported tree payload version: {p.get('version')!r}")
-    return BiasTree(
-        rollup_matrix=_csr_from_payload(p["matrix"]),
-        keys=_index_from_payload(p["keys"]),
-        digest=p["digest"],
-        how=p["how"],
-    )
-
-
-def _ser_reduce_op(o: ReduceOperator) -> bytes:
-    return pk.dumps(
-        {
-            "version": PAYLOAD_VERSION,
-            "matrix": _csr_payload(o.matrix),
-            "row_sums": o.row_sums,
-            "keys": _index_payload(o.keys),
-            "source_lat": o.source_lat,
-            "source_lon": o.source_lon,
-            "iterations": o.iterations,
-            "digest": o.digest,
-        },
-        protocol=pk.HIGHEST_PROTOCOL,
-    )
-
-
-def _deser_reduce_op(blob: bytes) -> ReduceOperator:
-    p = pk.loads(blob)
-    if p.get("version") != PAYLOAD_VERSION:
-        raise ValueError(f"unsupported reduce-operator payload version: {p.get('version')!r}")
-    return ReduceOperator(
-        matrix=_csr_from_payload(p["matrix"]),
-        row_sums=np.asarray(p["row_sums"]),
-        keys=_index_from_payload(p["keys"]),
-        source_lat=np.asarray(p["source_lat"]),
-        source_lon=np.asarray(p["source_lon"]),
-        iterations=p["iterations"],
-        digest=p["digest"],
-    )
-
-
-def _ser_restricted_op(operator: RestrictedOperator) -> bytes:
-    return pk.dumps(
-        {
-            "version": PAYLOAD_VERSION,
-            "windows": operator.windows,
-            "gathers": operator.gathers,
-            "matrix": _csr_payload(operator.matrix),
-            "row_sums": operator.row_sums,
-            "keys": _index_payload(operator.keys),
-            "source_lat": operator.source_lat,
-            "source_lon": operator.source_lon,
-            "lat_chunks": operator.lat_chunks,
-            "lon_chunks": operator.lon_chunks,
-            "digest": operator.digest,
-        },
-        protocol=pk.HIGHEST_PROTOCOL,
-    )
-
-
-def _deser_restricted_op(blob: bytes) -> RestrictedOperator:
-    payload = pk.loads(blob)
-    if payload.get("version") != PAYLOAD_VERSION:
-        raise ValueError(f"unsupported restricted-operator payload version: {payload.get('version')!r}")
-    return RestrictedOperator(
-        windows=tuple(payload["windows"]),
-        gathers=tuple(np.asarray(gather) for gather in payload["gathers"]),
-        matrix=_csr_from_payload(payload["matrix"]),
-        row_sums=np.asarray(payload["row_sums"]),
-        keys=_index_from_payload(payload["keys"]),
-        source_lat=np.asarray(payload["source_lat"]),
-        source_lon=np.asarray(payload["source_lon"]),
-        lat_chunks=tuple(payload["lat_chunks"]),
-        lon_chunks=tuple(payload["lon_chunks"]),
-        digest=payload["digest"],
-    )
+# Private aliases retained for benchmark and cache callers; there is one format.
+_ser_stencil, _deser_stencil = Stencil.to_npz, Stencil.from_npz
+_ser_resampler, _deser_resampler = Resampler.to_npz, Resampler.from_npz
+_ser_tree, _deser_tree = BiasTree.to_npz, BiasTree.from_npz
+_ser_reduce_op, _deser_reduce_op = ReduceOperator.to_npz, ReduceOperator.from_npz
+_ser_restricted_op, _deser_restricted_op = RestrictedOperator.to_npz, RestrictedOperator.from_npz
 
 
 def _take_rows[T: Stencil | ReduceOperator | RestrictedOperator](
@@ -266,7 +93,10 @@ class _Cache:
         if not force:
             blob = self._load(namespace, key)
             if blob is not None:
-                return deserialize(blob)
+                obj = deserialize(blob)
+                if obj.digest != digest:
+                    raise ValueError("cached object digest does not match requested inputs")
+                return obj
         obj = compute()
         self._store(namespace, key, serialize(obj))
         return obj
@@ -284,8 +114,8 @@ class _Cache:
         """Store canonical rows, but return the requested order on both misses and hits.
 
         Use the same positional sort as geometry hashing, not a key lookup:
-        duplicate labels need distinct rows too. Existing sorted v1 payloads
-        already have this layout, so no digest or payload migration is needed.
+        duplicate labels need distinct rows too. Standalone NPZ exports retain
+        their object's row order; only cache storage uses canonical rows.
         """
         order = np.argsort([repr(key) for key in keys])
         inverse = np.empty_like(order)
@@ -411,13 +241,13 @@ class _Cache:
 
 
 class LocalCache(_Cache):
-    """Pickle files under ``path/<namespace>/<key>.pkl``."""
+    """NPZ files under ``path/<namespace>/<key>.npz``; legacy entries are ignored."""
 
     def __init__(self, path: str | Path) -> None:
         self._root = Path(path)
 
     def _path(self, namespace: str, key: str) -> Path:
-        return self._root / namespace / f"{key}.pkl"
+        return self._root / namespace / f"{key}.npz"
 
     def _load(self, namespace: str, key: str) -> bytes | None:
         path = self._path(namespace, key)

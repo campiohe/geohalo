@@ -22,6 +22,7 @@ import pandas as pd
 import scipy.sparse as sp
 from numpy.typing import DTypeLike
 
+from geohalo._serialization import NPZSerializable
 from geohalo._sparse import GridMatrix, cast_matrix, operator_dtype
 from geohalo.geometry import _validate_period, ensure_ascending_lats, grid_digest, same_grid
 from geohalo.resampler import FactoredResampler
@@ -58,7 +59,7 @@ def reduce_operator_digest(
 
 
 @dataclass(frozen=True)
-class ReduceOperator:
+class ReduceOperator(NPZSerializable):
     matrix: sp.csr_matrix  # fused occ@T, (n_polygons, n_source); == occ if grids match
     row_sums: np.ndarray  # per-polygon occupancy total, for mean normalisation
     keys: pd.Index
