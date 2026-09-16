@@ -8,7 +8,7 @@ import numpy as np
 import scipy.sparse as sp
 
 from geohalo._sparse import GridMatrix
-from geohalo.geometry import bilinear_matrix_1d, ensure_ascending_lats, nearest_index
+from geohalo.geometry import _validate_period, bilinear_matrix_1d, ensure_ascending_lats, nearest_index
 
 
 @dataclass(frozen=True)
@@ -55,7 +55,14 @@ class Resampler:
         target_lon: np.ndarray,
         *,
         iterations: int = 1,
+        period: float | None = None,
     ) -> "Resampler":
+        """Build a mean-preserving transform; ``period`` wraps longitude only.
+
+        The default clamps both axes. Set ``period=360`` for cyclic longitude,
+        with no repeated source endpoint. Explicit target coordinates retain
+        their values and order, including targets outside the source cycle.
+        """
         if iterations < 1:
             raise ValueError(f"iterations must be >= 1, got {iterations}")
         source_lat, _ = ensure_ascending_lats(source_lat)
@@ -63,8 +70,8 @@ class Resampler:
         target_lat = np.asarray(target_lat, dtype=np.float64)
         target_lon = np.asarray(target_lon, dtype=np.float64)
 
-        transform = _build_transform(source_lat, source_lon, target_lat, target_lon, iterations)
-        digest = resampler_digest(source_lat, source_lon, target_lat, target_lon, iterations)
+        transform = _build_transform(source_lat, source_lon, target_lat, target_lon, iterations, period=period)
+        digest = resampler_digest(source_lat, source_lon, target_lat, target_lon, iterations, period=period)
         return cls(
             transform_matrix=transform,
             source_lat=source_lat,
@@ -80,6 +87,8 @@ def _build_factors(
     source_lon: np.ndarray,
     target_lat: np.ndarray,
     target_lon: np.ndarray,
+    *,
+    period: float | None = None,
 ) -> tuple[sp.csr_matrix, sp.csr_matrix, sp.csr_matrix]:
     """Iteration-independent operators (B, A, P) shared by both resampler forms.
 
@@ -92,12 +101,12 @@ def _build_factors(
 
     b = sp.kron(
         bilinear_matrix_1d(source_lat, target_lat),
-        bilinear_matrix_1d(source_lon, target_lon),
+        bilinear_matrix_1d(source_lon, target_lon, period=period),
         format="csr",
     )
 
     parent_lat = nearest_index(source_lat, target_lat)
-    parent_lon = nearest_index(source_lon, target_lon)
+    parent_lon = nearest_index(source_lon, target_lon, period=period)
     parent_flat = (parent_lat[:, None] * n_s_lon + parent_lon[None, :]).ravel()
     t_idx = np.arange(n_t)
 
@@ -114,9 +123,11 @@ def _build_transform(
     target_lat: np.ndarray,
     target_lon: np.ndarray,
     iterations: int,
+    *,
+    period: float | None = None,
 ) -> sp.csr_matrix:
     n_s = source_lat.size * source_lon.size
-    b, a, p = _build_factors(source_lat, source_lon, target_lat, target_lon)
+    b, a, p = _build_factors(source_lat, source_lon, target_lat, target_lon, period=period)
 
     # y_op = (sum_{j=0}^{iterations-1} G^j) @ B,  G = I_T - B@A.
     # Push B inside the recurrence and apply G on the right so every
@@ -171,15 +182,17 @@ class FactoredResampler:
         target_lon: np.ndarray,
         *,
         iterations: int = 1,
+        period: float | None = None,
     ) -> "FactoredResampler":
+        """Build factors with the same longitude-only ``period`` as Resampler."""
         if iterations < 1:
             raise ValueError(f"iterations must be >= 1, got {iterations}")
         source_lat, _ = ensure_ascending_lats(source_lat)
         source_lon = np.asarray(source_lon, dtype=np.float64)
         target_lat = np.asarray(target_lat, dtype=np.float64)
         target_lon = np.asarray(target_lon, dtype=np.float64)
-        b, a, p = _build_factors(source_lat, source_lon, target_lat, target_lon)
-        digest = resampler_digest(source_lat, source_lon, target_lat, target_lon, iterations)
+        b, a, p = _build_factors(source_lat, source_lon, target_lat, target_lon, period=period)
+        digest = resampler_digest(source_lat, source_lon, target_lat, target_lon, iterations, period=period)
         return cls(
             b=b,
             a=a,
@@ -232,11 +245,19 @@ def resampler_digest(
     target_lat: np.ndarray,
     target_lon: np.ndarray,
     iterations: int,
+    *,
+    period: float | None = None,
 ) -> bytes:
-    """Cache key with ascending source latitudes; target order is significant."""
+    """Cache key with ascending source latitudes; target order is significant.
+
+    Nonperiodic keys retain their original bytes; cyclic keys include the period.
+    """
+    period = _validate_period(source_lon, period)
     source_lat, _ = ensure_ascending_lats(source_lat)
     h = hashlib.sha256()
     for arr in (source_lat, source_lon, target_lat, target_lon):
         h.update(np.asarray(arr, dtype=np.float64).tobytes())
     h.update(str(iterations).encode())
+    if period is not None:
+        h.update(b"period:" + np.float64(period).tobytes())
     return h.digest()

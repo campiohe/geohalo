@@ -320,13 +320,16 @@ class _Cache:
         target_lon: np.ndarray,
         *,
         iterations: int = 1,
+        period: float | None = None,
         force_recompute: bool = False,
     ) -> Resampler:
-        digest = resampler_digest(source_lat, source_lon, target_lat, target_lon, iterations)
+        digest = resampler_digest(source_lat, source_lon, target_lat, target_lon, iterations, period=period)
         return self._get_or_compute(
             "resampler",
             digest,
-            lambda: Resampler.compute(source_lat, source_lon, target_lat, target_lon, iterations=iterations),
+            lambda: Resampler.compute(
+                source_lat, source_lon, target_lat, target_lon, iterations=iterations, period=period,
+            ),
             _ser_resampler,
             _deser_resampler,
             force_recompute,
@@ -359,14 +362,17 @@ class _Cache:
         *,
         iterations: int = 1,
         dtype: DTypeLike = np.float64,
+        period: float | None = None,
         force_recompute: bool = False,
     ) -> ReduceOperator:
-        digest = reduce_operator_digest(stencil.digest, source_lat, source_lon, iterations, dtype=dtype)
+        digest = reduce_operator_digest(stencil.digest, source_lat, source_lon, iterations, dtype=dtype, period=period)
         return self._get_or_compute_rows(
             "reduceop",
             digest,
             stencil.keys,
-            lambda: ReduceOperator.compute(stencil, source_lat, source_lon, iterations=iterations, dtype=dtype),
+            lambda: ReduceOperator.compute(
+                stencil, source_lat, source_lon, iterations=iterations, dtype=dtype, period=period,
+            ),
             _ser_reduce_op,
             _deser_reduce_op,
             force_recompute,

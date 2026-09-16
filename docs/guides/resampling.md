@@ -38,7 +38,92 @@ fine = ghl.resample_grid_with_matrix(da, resampler)
 ```
 
 The `Resampler` is value-independent and [cacheable](caching.md) — built once per
-`(source grid, target grid, iterations)`.
+`(source grid, target grid, iterations, period)`.
+
+## Periodic longitude
+
+Global longitude has a seam, not an outer edge. Opt into wrapping with
+`period=360`; the default `period=None` keeps the existing clamped behavior.
+Latitude is never wrapped by the grid APIs.
+
+```python
+fine = ghl.resample_grid(global_da, target_resolution=0.5, period=360)
+out = ghl.reduce(global_da, geoms, target_resolution=0.5, period=360)
+```
+
+With `period` set, `resample_grid`, `reduce(..., target_resolution=...)`, and
+`geometry.target_coords_from_resolution` generate **one full longitude cycle**,
+starting at the minimum source longitude and excluding the repeated endpoint.
+For source centres `-180, -178, …, 178`, a 0.5° target includes
+`-180, -179.5, …, 179.5`. Choose a resolution that divides the period if you need
+the spacing across the seam to equal the interior spacing. Without `period`,
+target generation continues to use the source min/max extent.
+
+Explicit targets passed to `Resampler.compute`, `FactoredResampler.compute`, or
+their cache methods are **not extended, sorted, or relabelled**. For example,
+targets `179.5`, `-180.5`, and `539.5` all sample the same location. Sources may
+use either the −180°/180° or 0°/360° convention, or another shifted cycle, and
+may be ascending or descending. Source columns retain their supplied order.
+
+```python
+resampler = cache.get_or_compute_resampler(
+    global_da.latitude.to_numpy(), global_da.longitude.to_numpy(),
+    target_lat, target_lon, iterations=3, period=360,
+)
+fine = ghl.resample_grid_with_matrix(global_da, resampler)
+
+op = cache.get_or_compute_reduce_operator(
+    stencil, global_da.latitude.to_numpy(), global_da.longitude.to_numpy(),
+    iterations=3, period=360,
+)
+out = ghl.reduce_with_operator(global_da, op)
+```
+
+The period is baked into the operators, so apply calls do not need it again.
+`reduce_with_stencil(..., period=360)` also supports the option, including its
+masked and weighted paths. Restricted read plans automatically include the
+source chunks on both sides of the seam, without reading intervening chunks.
+
+The underlying linear weights now give the seam blend from issue #22:
+
+```python
+import numpy as np
+
+from geohalo.geometry import bilinear_matrix_1d
+
+lon = np.arange(-180.0, 180.0, 2.0)
+weights = bilinear_matrix_1d(lon, np.array([179.5]), period=360)
+weights.toarray()[0, [0, -1]]  # [0.75, 0.25]: −180° and 178°
+```
+
+The full resampler additionally performs its mean-preserving correction; its
+output is not just this bilinear blend. Both interpolation and nearest-parent
+assignment wrap, preserving each occupied parent's **unweighted child mean**
+across the seam. A nearest-parent tie chooses the lower *unwrapped* neighbour:
+179° lies halfway between 178° and 180° (the wrapped −180° cell), so it belongs
+to 178°. The existing overshoot and missing-data semantics are unchanged.
+
+### Input contract and limits
+
+The period must be positive and finite. Periodic source coordinates must be
+finite, one-dimensional, strictly monotonic, and span **less than** the period.
+Do not include both −180° and +180°, or both 0° and 360°: they repeat a cell.
+A single source centre is constant everywhere. Periodic targets must be finite
+and one-dimensional; their order is unrestricted. The 1-D helpers support
+irregular spacing, while stencil construction still requires a regular raster.
+
+Setting `period` explicitly declares that the source represents a cycle; there
+is no automatic global-grid detection. Using it on a regional source connects
+the last centre to the first across the remaining gap and makes resolution-based
+calls generate a full cycle, so leave it unset for ordinary regional grids.
+
+This option changes **sampling only**. Stencils still use ordinary EPSG:4326
+polygon coordinates: it does not split, unwrap, or duplicate geometries across
+the antimeridian. Supply geometries in the stencil's coordinate domain, splitting
+or unwrapping them yourself as needed. A prebuilt stencil can use an unwrapped
+regional target such as 175°–185° while sampling a −180°–180° source periodically.
+Without resampling, `reduce(..., period=360)` does not add periodic polygon
+coverage. This is also not spherical-area-conservative regridding.
 
 ## Choosing `iterations`
 

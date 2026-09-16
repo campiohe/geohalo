@@ -23,7 +23,7 @@ import scipy.sparse as sp
 from numpy.typing import DTypeLike
 
 from geohalo._sparse import GridMatrix, cast_matrix, operator_dtype
-from geohalo.geometry import ensure_ascending_lats, grid_digest, same_grid
+from geohalo.geometry import _validate_period, ensure_ascending_lats, grid_digest, same_grid
 from geohalo.resampler import FactoredResampler
 from geohalo.stencil import Stencil
 
@@ -35,6 +35,7 @@ def reduce_operator_digest(
     iterations: int,
     *,
     dtype: DTypeLike = np.float64,
+    period: float | None = None,
 ) -> bytes:
     """Cache key for a fused operator, derivable from inputs without building it.
 
@@ -43,6 +44,7 @@ def reduce_operator_digest(
     Coefficient dtype distinguishes entries; float64 retains existing keys.
     """
     src_lat_asc, _ = ensure_ascending_lats(source_lat)
+    period = _validate_period(source_lon, period)
     h = hashlib.sha256()
     h.update(stencil_digest)
     h.update(grid_digest(src_lat_asc, source_lon))
@@ -50,6 +52,8 @@ def reduce_operator_digest(
     dtype = operator_dtype(dtype)
     if dtype != np.float64:
         h.update(b"dtype:" + dtype.name.encode())
+    if period is not None:
+        h.update(b"period:" + np.float64(period).tobytes())
     return h.digest()
 
 
@@ -108,27 +112,30 @@ class ReduceOperator:
         *,
         iterations: int = 1,
         dtype: DTypeLike = np.float64,
+        period: float | None = None,
     ) -> "ReduceOperator":
         """Fuse with float64 (default) or float32 stored coefficients.
 
         Fusion uses the existing float64 resampling math before casting. The
         stencil's float64 row sums are retained; casting does not sort entries.
         Request float32 explicitly even if the stencil already uses float32.
+        ``period=360`` wraps resampling in longitude, not polygon geometries.
         """
         dtype = operator_dtype(dtype)
         src_lat_asc, _ = ensure_ascending_lats(source_lat)
         src_lon = np.asarray(source_lon, dtype=np.float64)
+        period = _validate_period(src_lon, period)
         occ = stencil.occupancy_matrix
 
         if same_grid(src_lat_asc, src_lon, stencil.lats, stencil.lons):
             matrix = occ.tocsr()
         else:
             resampler = FactoredResampler.compute(
-                src_lat_asc, src_lon, stencil.lats, stencil.lons, iterations=iterations,
+                src_lat_asc, src_lon, stencil.lats, stencil.lons, iterations=iterations, period=period,
             )
             matrix = resampler.fuse_left(occ)
 
-        digest = reduce_operator_digest(stencil.digest, src_lat_asc, src_lon, iterations, dtype=dtype)
+        digest = reduce_operator_digest(stencil.digest, src_lat_asc, src_lon, iterations, dtype=dtype, period=period)
         return cls(
             matrix=cast_matrix(matrix, dtype),
             row_sums=np.asarray(stencil.row_sums, dtype=np.float64),

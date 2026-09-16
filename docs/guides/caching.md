@@ -10,9 +10,9 @@ These precomputed objects depend only on their inputs, not on grid values:
 | Object           | Depends on                                       | Built by                       |
 | ---------------- | ------------------------------------------------ | ------------------------------ |
 | `Stencil`        | grid coords + spherical flag + polygons + dtype  | `get_or_compute_stencil`       |
-| `Resampler`      | source/target coords + iterations                | `get_or_compute_resampler`     |
+| `Resampler`      | source/target coords + iterations + period       | `get_or_compute_resampler`     |
 | `BiasTree`       | edges + weights + how                            | `get_or_compute_tree`          |
-| `ReduceOperator` | stencil digest + source coords + iterations + dtype | `get_or_compute_reduce_operator` |
+| `ReduceOperator` | stencil digest + source coords + iterations + dtype + period | `get_or_compute_reduce_operator` |
 | `RestrictedOperator` | fused operator digest + stored coords + spatial chunks | `get_or_compute_restricted_operator` |
 
 None of them depends on the grid **values** — so a single cached object serves every
@@ -54,7 +54,7 @@ The digests are also carefully **canonical**:
 
 Geometry hashing uses vectorised WKB encoding. During stencil construction, the
 same encoded bytes are reused for extraction and hashing. The digest byte format
-is unchanged for default float64 coefficients, so existing stencil and
+is unchanged for default float64 coefficients and `period=None`, so existing stencil and
 dependent reduce-operator cache entries remain valid.
 
 Both stencil and fused-operator cache methods accept `dtype=np.float32`, matching
@@ -63,6 +63,14 @@ before hashing; different coefficient dtypes use different cache entries.
 Restricted plans inherit that distinction through the fused operator digest.
 No payload-version change is needed: coefficient arrays already carry their dtype.
 The apply-time `preserve_dtype=True` flag does not affect cache keys.
+
+Resampler and fused-operator cache methods accept `period=360` for
+[cyclic longitude sampling](resampling.md#periodic-longitude). Periodic and
+nonperiodic builds use distinct keys, as do different periods; `360`, `360.0`,
+and equivalent NumPy scalar values share a key. Restricted plans inherit the
+period through the fused operator digest. Existing `period=None` keys and
+payload formats are unchanged. The built matrices already encode the period,
+so no additional apply-time argument or cache metadata is needed.
 
 `Stencil`, `ReduceOperator`, and `RestrictedOperator` payloads store canonical
 row order. Their cache methods return **caller-ordered** objects: stencil rows

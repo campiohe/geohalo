@@ -106,31 +106,89 @@ def target_coords_from_resolution(
     source_lat: np.ndarray,
     source_lon: np.ndarray,
     target_resolution: float,
+    *,
+    period: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Target centres from source extent + a target step, via arange.
 
     Spans [min, max] of each source coord at the requested step. Works for
-    refine (smaller step) or coarsen (larger step).
+    refine (smaller step) or coarsen (larger step). With ``period``, longitude
+    instead spans one full cycle starting at its minimum, excluding the repeated
+    endpoint. Latitude is never periodic.
     """
     if target_resolution <= 0:
         raise ValueError(f"target_resolution must be > 0, got {target_resolution}")
     source_lat = np.asarray(source_lat, dtype=np.float64)
     source_lon = np.asarray(source_lon, dtype=np.float64)
+    period = _validate_period(source_lon, period)
     tlat = np.arange(source_lat.min(), source_lat.max() + target_resolution / 2, target_resolution)
-    tlon = np.arange(source_lon.min(), source_lon.max() + target_resolution / 2, target_resolution)
+    tlon = (
+        np.arange(source_lon.min(), source_lon.max() + target_resolution / 2, target_resolution)
+        if period is None else source_lon.min() + np.arange(0.0, period, target_resolution)
+    )
     return tlat, tlon
 
 
-def bilinear_matrix_1d(source: np.ndarray, target: np.ndarray) -> sp.csr_matrix:
-    """(n_target, n_source) 1-D linear interpolation matrix with edge clamping.
+def _validate_period(source: np.ndarray, period: float | None) -> float | None:
+    """Normalize an optional period and validate its non-repeated source cycle."""
+    if period is None:
+        return None
+    period = float(period)
+    if not np.isfinite(period) or period <= 0:
+        raise ValueError("period must be finite and > 0")
+    source = np.asarray(source, dtype=np.float64)
+    if source.ndim != 1 or source.size == 0 or not np.isfinite(source).all():
+        raise ValueError("periodic source coordinates must be a nonempty finite 1-D array")
+    diffs = np.diff(source)
+    if not (np.all(diffs > 0) or np.all(diffs < 0)):
+        raise ValueError("periodic source coordinates must be strictly monotonic")
+    if abs(source[-1] - source[0]) >= period:
+        raise ValueError("periodic source coordinates must span less than period; omit the repeated endpoint")
+    return period
+
+
+def _periodic_brackets(
+    source: np.ndarray, target: np.ndarray, period: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Locate cyclic neighbours without copying three cycles of the source axis."""
+    period = _validate_period(source, period)
+    if target.ndim != 1 or not np.isfinite(target).all():
+        raise ValueError("periodic target coordinates must be a finite 1-D array")
+    ascending = source[0] <= source[-1]
+    src = source if ascending else source[::-1]
+    # A single extra centre covers the seam. Modulo also handles targets many
+    # periods away; only column indices are folded, never the caller's coords.
+    extended = np.append(src, src[0] + period)
+    wrapped = src[0] + np.remainder(target - src[0], period)
+    lo = np.minimum(np.searchsorted(src, wrapped, side="right") - 1, src.size - 1)
+    frac = (wrapped - extended[lo]) / (extended[lo + 1] - extended[lo])
+    hi = (lo + 1) % src.size
+    if not ascending:
+        lo, hi = src.size - 1 - lo, src.size - 1 - hi
+    return lo, hi, frac
+
+
+def bilinear_matrix_1d(
+    source: np.ndarray, target: np.ndarray, *, period: float | None = None,
+) -> sp.csr_matrix:
+    """(n_target, n_source) 1-D linear interpolation, clamped unless periodic.
 
     Handles a descending `source` array (e.g. ECMWF latitudes) by sorting it
     ascending for the lookup and mapping the column indices back to the
     caller's ordering. `target` may be in any order — each row is independent.
+    ``period`` wraps across the seam (e.g. 360 for longitude). Periodic sources
+    must be finite, strictly monotonic, and span less than a positive finite
+    period: do not include both endpoints of the same cycle. Targets may lie
+    any number of cycles away. A single source cell is constant everywhere.
     """
     source = np.asarray(source, dtype=np.float64)
     target = np.asarray(target, dtype=np.float64)
     n_s, n_t = source.size, target.size
+    if period is not None:
+        lo, hi, frac = _periodic_brackets(source, target, period)
+        return sp.csr_matrix(
+            (np.r_[1.0 - frac, frac], (np.tile(np.arange(n_t), 2), np.r_[lo, hi])), shape=(n_t, n_s),
+        )
     if n_s == 1:
         # A single source cell is constant along this axis: every target reads it.
         return sp.csr_matrix((np.ones(n_t), (np.arange(n_t), np.zeros(n_t, dtype=np.int64))), shape=(n_t, 1))
@@ -151,14 +209,19 @@ def bilinear_matrix_1d(source: np.ndarray, target: np.ndarray) -> sp.csr_matrix:
     return m
 
 
-def nearest_index(source: np.ndarray, target: np.ndarray) -> np.ndarray:
+def nearest_index(source: np.ndarray, target: np.ndarray, *, period: float | None = None) -> np.ndarray:
     """Index of the nearest source centre for each target centre (ties → lower).
 
     Handles a descending `source` array by sorting ascending for the lookup
-    and mapping indices back to the caller's ordering.
+    and mapping indices back to the caller's ordering. ``period`` uses the same
+    cyclic neighbours and validation as ``bilinear_matrix_1d``. Seam ties choose
+    the lower *unwrapped* neighbour (the last centre of the ascending cycle).
     """
     source = np.asarray(source, dtype=np.float64)
     target = np.asarray(target, dtype=np.float64)
+    if period is not None:
+        lo, hi, frac = _periodic_brackets(source, target, period)
+        return np.where(frac <= 0.5, lo, hi)
     n_s = source.size
     if n_s == 1:
         return np.zeros(target.size, dtype=np.int64)

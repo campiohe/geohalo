@@ -11,7 +11,7 @@ import xarray as xr
 
 from geohalo._sparse import projection_dtype
 from geohalo.bias_tree import BiasTree
-from geohalo.geometry import ensure_ascending_lats, same_grid, target_coords_from_resolution
+from geohalo.geometry import _validate_period, ensure_ascending_lats, same_grid, target_coords_from_resolution
 from geohalo.reduce_operator import ReduceOperator
 from geohalo.resampler import FactoredResampler, Resampler
 from geohalo.restricted_operator import RestrictedOperator, _grid_chunks
@@ -120,11 +120,18 @@ def resample_grid[T: xr.DataArray | xr.Dataset](
     lat_dim: str = "latitude",
     lon_dim: str = "longitude",
     iterations: int = 1,
+    period: float | None = None,
 ) -> T:
+    """Resample at a target spacing; ``period`` makes longitude a full cycle.
+
+    ``period=360`` wraps interpolation and parent assignment at the seam. The
+    generated longitude centres start at the source minimum and exclude its
+    repeated endpoint. ``period=None`` retains clamped, min/max-based targets.
+    """
     src_lat = source[lat_dim].to_numpy()
     src_lon = source[lon_dim].to_numpy()
-    t_lat, t_lon = target_coords_from_resolution(src_lat, src_lon, target_resolution)
-    resampler = Resampler.compute(src_lat, src_lon, t_lat, t_lon, iterations=iterations)
+    t_lat, t_lon = target_coords_from_resolution(src_lat, src_lon, target_resolution, period=period)
+    resampler = Resampler.compute(src_lat, src_lon, t_lat, t_lon, iterations=iterations, period=period)
     return resample_grid_with_matrix(source, resampler, lat_dim=lat_dim, lon_dim=lon_dim)
 
 
@@ -304,24 +311,29 @@ def reduce_with_stencil[T: xr.DataArray | xr.Dataset](
     weight_key: str | None = None,
     how: Literal["mean", "sum"] = "mean",
     preserve_dtype: bool = False,
+    period: float | None = None,
 ) -> T:
     """Reduce in stencil row order, automatically handling NaNs and cell weights.
 
     ``preserve_dtype=True`` retains each floating input variable's result dtype;
     integer means remain floating. Clean fusion uses the stencil's coefficient
     dtype. Masked/weighted normalization retains its existing arithmetic precision.
+    ``period=360`` wraps resampling in longitude; stencil coordinates and
+    polygon geometries are not wrapped or changed.
     """
     if how not in ("mean", "sum"):
         raise ValueError(f"how must be 'mean' or 'sum', got {how!r}")
     _require_spatial_dims(grid, lat_dim, lon_dim)
-    grid = grid.compute()  # materialise once: avoids double-decoding lazy data
     src_lat, _ = ensure_ascending_lats(grid[lat_dim].to_numpy())
     src_lon = np.asarray(grid[lon_dim].to_numpy(), dtype=np.float64)
+    period = _validate_period(src_lon, period)
+    grid = grid.compute()  # materialise once: avoids double-decoding lazy data
 
     # Clean path: build the fused operator once and delegate.
     if weight_key is None and not _any_spatial_nan(grid, lat_dim, lon_dim):
         operator = ReduceOperator.compute(
             stencil, src_lat, src_lon, iterations=resample_iterations, dtype=stencil.occupancy_matrix.dtype,
+            period=period,
         )
         return reduce_with_operator(
             grid, operator, how=how, preserve_dtype=preserve_dtype, lat_dim=lat_dim, lon_dim=lon_dim, geom_dim=geom_dim,
@@ -332,7 +344,7 @@ def reduce_with_stencil[T: xr.DataArray | xr.Dataset](
         resampler = None
     else:
         resampler = FactoredResampler.compute(
-            src_lat, src_lon, stencil.lats, stencil.lons, iterations=resample_iterations,
+            src_lat, src_lon, stencil.lats, stencil.lons, iterations=resample_iterations, period=period,
         )
     if isinstance(grid, xr.Dataset):
         return _map_spatial_vars(
@@ -465,24 +477,28 @@ def reduce[T: xr.DataArray | xr.Dataset](  # noqa: PLR0913 - preserve the public
     weight_key: str | None = None,
     how: Literal["mean", "sum"] = "mean",
     preserve_dtype: bool = False,
+    period: float | None = None,
 ) -> T:
     """Build a float64 stencil and reduce polygons in caller order.
 
     ``preserve_dtype=True`` retains each floating input variable's result dtype;
     integer means remain floating. For float32 coefficients, prebuild a stencil
     or operator with ``dtype=np.float32`` and use its corresponding reducer.
+    ``period=360`` enables cyclic longitude resampling and generates a full
+    cycle when ``target_resolution`` is set. Geometries themselves do not wrap.
     """
     src_lat = grid[lat_dim].to_numpy()
     src_lon = grid[lon_dim].to_numpy()
     if target_resolution is None:
         stencil = Stencil.compute(src_lat, src_lon, geoms, spherical_correction=spherical_correction)
     else:
-        tlat, tlon = target_coords_from_resolution(src_lat, src_lon, target_resolution)
+        tlat, tlon = target_coords_from_resolution(src_lat, src_lon, target_resolution, period=period)
         stencil = Stencil.compute(tlat, tlon, geoms, spherical_correction=spherical_correction)
     return reduce_with_stencil(
         grid, stencil, resample_iterations=resample_iterations,
         lat_dim=lat_dim, lon_dim=lon_dim, geom_dim=geom_dim,
         weight_key=weight_key, how=how, preserve_dtype=preserve_dtype,
+        period=period,
     )
 
 
