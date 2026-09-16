@@ -338,6 +338,8 @@
       
         
       
+        
+      
     
     
     
@@ -505,6 +507,34 @@
     
   
     Mean-preserving downscaling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/conservative/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conservative regridding
   
 
     
@@ -1182,39 +1212,73 @@
 <h1 id="resampling-grids">Resampling grids<a class="headerlink" href="#resampling-grids" title="Permanent link">&para;</a></h1>
 <p>Resampling is a <strong>first-class, reusable</strong> operation in geohalo — not just a hidden step
 inside <code>reduce</code>. If you want the refined (or coarsened) field itself, <code>resample_grid</code>
-gives it to you, backed by the same <a href="../../concepts/downscaling/">mean-preserving</a> sparse
-transform.</p>
+gives it to you. Choose between the default
+<a href="../../concepts/downscaling/">mean-preserving</a> sparse transform and
+<a href="../../concepts/conservative/">conservative spherical area overlaps</a>.</p>
 <h2 id="one-call">One call<a class="headerlink" href="#one-call" title="Permanent link">&para;</a></h2>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">geohalo</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ghl</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">fine</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">resample_grid</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">target_resolution</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">iterations</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
 </span></code></pre></div>
-<p>It works in <strong>either direction</strong> — a smaller <code>target_resolution</code> refines, a larger one
-coarsens — and mean-preservation is exact wherever geometrically possible (always when
-refining; coarsening can't preserve a source cell that has no target child).</p>
+<p>Both methods accept refining or coarsening coordinates, but preserve different means:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Preserves</th>
+<th>Typical use</th>
+<th>Possible overshoot?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>"meanpreserving"</code> (default)</td>
+<td>Each occupied parent's unweighted child mean</td>
+<td>Smooth refinement</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>"conservative"</code></td>
+<td>Spherical area integral over the shared footprint, with destination normalization</td>
+<td>Area-weighted coarsening; bounded fields</td>
+<td>No, for fully covered cells</td>
+</tr>
+</tbody>
+</table>
+<p>The default method is intended for refining: fine-to-coarse output is not an
+area-weighted block mean, and source cells with no target child cannot retain
+their values. Conservative refinement is piecewise constant on nested cells,
+not a smoother version of the default method.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">coarse</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">resample_grid</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">target_resolution</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s2">&quot;conservative&quot;</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Target generation still uses source-centre min/max (or one full longitude cycle
+with <code>period</code>), not source-cell outer edges. For identical-footprint conservation,
+use explicit target coordinates/bounds as shown in
+<a href="../../concepts/conservative/#matched-footprints">conservative regridding</a>.</p>
 <p><code>resample_grid</code> accepts an <code>xr.DataArray</code> or an <code>xr.Dataset</code> (every spatial data variable
 is resampled, the rest pass through) and preserves all non-spatial dims.</p>
 <h2 id="separating-build-from-apply">Separating build from apply<a class="headerlink" href="#separating-build-from-apply" title="Permanent link">&para;</a></h2>
 <p><code>resample_grid</code> builds a <code>Resampler</code> and applies it in one shot. To reuse the transform
 across many slices, build it once and apply with <code>resample_grid_with_matrix</code>:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">geohalo</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ghl</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">cache</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">LocalCache</span><span class="p">(</span><span class="s2">&quot;./.geohalo-cache&quot;</span><span class="p">)</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">t_lat</span><span class="p">,</span> <span class="n">t_lon</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">target_coords_from_resolution</span><span class="p">(</span><span class="n">da</span><span class="o">.</span><span class="n">latitude</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">da</span><span class="o">.</span><span class="n">longitude</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">)</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">resampler</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">get_or_compute_resampler</span><span class="p">(</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="n">da</span><span class="o">.</span><span class="n">latitude</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">da</span><span class="o">.</span><span class="n">longitude</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">t_lat</span><span class="p">,</span> <span class="n">t_lon</span><span class="p">,</span> <span class="n">iterations</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="p">)</span>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="n">fine</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">resample_grid_with_matrix</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">resampler</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">geohalo</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ghl</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">cache</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">LocalCache</span><span class="p">(</span><span class="s2">&quot;./.geohalo-cache&quot;</span><span class="p">)</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">t_lat</span><span class="p">,</span> <span class="n">t_lon</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">target_coords_from_resolution</span><span class="p">(</span><span class="n">da</span><span class="o">.</span><span class="n">latitude</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">da</span><span class="o">.</span><span class="n">longitude</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">)</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="n">resampler</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">get_or_compute_resampler</span><span class="p">(</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="n">da</span><span class="o">.</span><span class="n">latitude</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">da</span><span class="o">.</span><span class="n">longitude</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">t_lat</span><span class="p">,</span> <span class="n">t_lon</span><span class="p">,</span> <span class="n">iterations</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="p">)</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="n">fine</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">resample_grid_with_matrix</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">resampler</span><span class="p">)</span>
 </span></code></pre></div>
 <p>The <code>Resampler</code> is value-independent and <a href="../caching/">cacheable</a> — built once per
-<code>(source grid, target grid, iterations, period)</code>.</p>
+the source/target grids and build options: method, iterations, period, and, for
+conservative builds, normalization and optional bounds.</p>
 <h2 id="periodic-longitude">Periodic longitude<a class="headerlink" href="#periodic-longitude" title="Permanent link">&para;</a></h2>
 <p>Global longitude has a seam, not an outer edge. Opt into wrapping with
 <code>period=360</code>; the default <code>period=None</code> keeps the existing clamped behavior.
 Latitude is never wrapped by the grid APIs.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">fine</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">resample_grid</span><span class="p">(</span><span class="n">global_da</span><span class="p">,</span> <span class="n">target_resolution</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mi">360</span><span class="p">)</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">out</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce</span><span class="p">(</span><span class="n">global_da</span><span class="p">,</span> <span class="n">geoms</span><span class="p">,</span> <span class="n">target_resolution</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mi">360</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">fine</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">resample_grid</span><span class="p">(</span><span class="n">global_da</span><span class="p">,</span> <span class="n">target_resolution</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mi">360</span><span class="p">)</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">out</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce</span><span class="p">(</span><span class="n">global_da</span><span class="p">,</span> <span class="n">geoms</span><span class="p">,</span> <span class="n">target_resolution</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mi">360</span><span class="p">)</span>
 </span></code></pre></div>
 <p>With <code>period</code> set, <code>resample_grid</code>, <code>reduce(..., target_resolution=...)</code>, and
 <code>geometry.target_coords_from_resolution</code> generate <strong>one full longitude cycle</strong>,
@@ -1228,30 +1292,30 @@ their cache methods are <strong>not extended, sorted, or relabelled</strong>. Fo
 targets <code>179.5</code>, <code>-180.5</code>, and <code>539.5</code> all sample the same location. Sources may
 use either the −180°/180° or 0°/360° convention, or another shifted cycle, and
 may be ascending or descending. Source columns retain their supplied order.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">resampler</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">get_or_compute_resampler</span><span class="p">(</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">global_da</span><span class="o">.</span><span class="n">latitude</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="n">global_da</span><span class="o">.</span><span class="n">longitude</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">target_lat</span><span class="p">,</span> <span class="n">target_lon</span><span class="p">,</span> <span class="n">iterations</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mi">360</span><span class="p">,</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="p">)</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">fine</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">resample_grid_with_matrix</span><span class="p">(</span><span class="n">global_da</span><span class="p">,</span> <span class="n">resampler</span><span class="p">)</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">op</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">get_or_compute_reduce_operator</span><span class="p">(</span>
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="n">stencil</span><span class="p">,</span> <span class="n">global_da</span><span class="o">.</span><span class="n">latitude</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="n">global_da</span><span class="o">.</span><span class="n">longitude</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span>
-</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="n">iterations</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mi">360</span><span class="p">,</span>
-</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="p">)</span>
-</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="n">out</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce_with_operator</span><span class="p">(</span><span class="n">global_da</span><span class="p">,</span> <span class="n">op</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">resampler</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">get_or_compute_resampler</span><span class="p">(</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">global_da</span><span class="o">.</span><span class="n">latitude</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="n">global_da</span><span class="o">.</span><span class="n">longitude</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">target_lat</span><span class="p">,</span> <span class="n">target_lon</span><span class="p">,</span> <span class="n">iterations</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mi">360</span><span class="p">,</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="p">)</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="n">fine</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">resample_grid_with_matrix</span><span class="p">(</span><span class="n">global_da</span><span class="p">,</span> <span class="n">resampler</span><span class="p">)</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="n">op</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">get_or_compute_reduce_operator</span><span class="p">(</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    <span class="n">stencil</span><span class="p">,</span> <span class="n">global_da</span><span class="o">.</span><span class="n">latitude</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="n">global_da</span><span class="o">.</span><span class="n">longitude</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>    <span class="n">iterations</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mi">360</span><span class="p">,</span>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="p">)</span>
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="n">out</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce_with_operator</span><span class="p">(</span><span class="n">global_da</span><span class="p">,</span> <span class="n">op</span><span class="p">)</span>
 </span></code></pre></div>
 <p>The period is baked into the operators, so apply calls do not need it again.
 <code>reduce_with_stencil(..., period=360)</code> also supports the option, including its
 masked and weighted paths. Restricted read plans automatically include the
 source chunks on both sides of the seam, without reading intervening chunks.</p>
 <p>The underlying linear weights now give the seam blend from issue #22:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">geohalo.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">bilinear_matrix_1d</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="n">lon</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="o">-</span><span class="mf">180.0</span><span class="p">,</span> <span class="mf">180.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">)</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="n">weights</span> <span class="o">=</span> <span class="n">bilinear_matrix_1d</span><span class="p">(</span><span class="n">lon</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">179.5</span><span class="p">]),</span> <span class="n">period</span><span class="o">=</span><span class="mi">360</span><span class="p">)</span>
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="n">weights</span><span class="o">.</span><span class="n">toarray</span><span class="p">()[</span><span class="mi">0</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]]</span>  <span class="c1"># [0.75, 0.25]: −180° and 178°</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">geohalo.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">bilinear_matrix_1d</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">lon</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="o">-</span><span class="mf">180.0</span><span class="p">,</span> <span class="mf">180.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">)</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="n">weights</span> <span class="o">=</span> <span class="n">bilinear_matrix_1d</span><span class="p">(</span><span class="n">lon</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">179.5</span><span class="p">]),</span> <span class="n">period</span><span class="o">=</span><span class="mi">360</span><span class="p">)</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="n">weights</span><span class="o">.</span><span class="n">toarray</span><span class="p">()[</span><span class="mi">0</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]]</span>  <span class="c1"># [0.75, 0.25]: −180° and 178°</span>
 </span></code></pre></div>
 <p>The full resampler additionally performs its mean-preserving correction; its
 output is not just this bilinear blend. Both interpolation and nearest-parent
@@ -1263,9 +1327,11 @@ to 178°. The existing overshoot and missing-data semantics are unchanged.</p>
 <p>The period must be positive and finite. Periodic source coordinates must be
 finite, one-dimensional, strictly monotonic, and span <strong>less than</strong> the period.
 Do not include both −180° and +180°, or both 0° and 360°: they repeat a cell.
-A single source centre is constant everywhere. Periodic targets must be finite
-and one-dimensional; their order is unrestricted. The 1-D helpers support
-irregular spacing, while stencil construction still requires a regular raster.</p>
+For the default mean-preserving method, a single source centre is constant
+everywhere; periodic targets must be finite and one-dimensional, but their order
+is unrestricted. Conservative regridding has the stricter cell-bounds contract
+linked below. The 1-D helpers support irregular spacing, while stencil
+construction still requires a regular raster.</p>
 <p>Setting <code>period</code> explicitly declares that the source represents a cycle; there
 is no automatic global-grid detection. Using it on a regional source connects
 the last centre to the first across the remaining gap and makes resolution-based
@@ -1276,11 +1342,16 @@ the antimeridian. Supply geometries in the stencil's coordinate domain, splittin
 or unwrapping them yourself as needed. A prebuilt stencil can use an unwrapped
 regional target such as 175°–185° while sampling a −180°–180° source periodically.
 Without resampling, <code>reduce(..., period=360)</code> does not add periodic polygon
-coverage. This is also not spherical-area-conservative regridding.</p>
+coverage. Wrapping by itself does not add spherical-area conservation; choose
+<code>method="conservative"</code> on a grid resampler for that. Its axes must be strictly
+monotonic and may cover at most one target cycle. See the
+<a href="../../concepts/conservative/#coordinates-and-cell-bounds">conservative bounds contract</a>.</p>
 <h2 id="choosing-iterations">Choosing <code>iterations</code><a class="headerlink" href="#choosing-iterations" title="Permanent link">&para;</a></h2>
 <p><code>iterations</code> controls how far the <a href="../../concepts/downscaling/">mean-preserving correction</a>
 reaches across the grid. Every value preserves each parent cell's mean exactly; higher
 counts trade build cost for smoothness.</p>
+<p>This parameter applies only to <code>method="meanpreserving"</code>. Conservative calls
+must leave <code>iterations=1</code>; other values raise <code>ValueError</code> rather than being ignored.</p>
 <table>
 <thead>
 <tr>
@@ -1307,22 +1378,26 @@ counts trade build cost for smoothness.</p>
 </tr>
 </tbody>
 </table>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">coarse</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">resample_grid</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">target_resolution</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>          <span class="c1"># coarsen, iters=1</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">smooth</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">resample_grid</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">target_resolution</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">iterations</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">coarse</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">resample_grid</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">target_resolution</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>          <span class="c1"># coarsen, iters=1</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">smooth</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">resample_grid</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">target_resolution</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">iterations</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="cost-note-materialised-vs-fused">Cost note: materialised vs fused<a class="headerlink" href="#cost-note-materialised-vs-fused" title="Permanent link">&para;</a></h2>
-<p><code>resample_grid</code> materialises the full transform <span class="arithmatex">\(\mathbf{T}\)</span>, because you asked for the
+<p>With the default method, <code>resample_grid</code> materialises the full transform <span class="arithmatex">\(\mathbf{T}\)</span>, because you asked for the
 <strong>field</strong>. That matrix can be large for a big refinement (hundreds of MB at fine target
 resolutions and high iteration counts).</p>
+<p>The conservative method instead stores two 1-D overlap matrices and applies
+them one axis at a time. It never materialises a full grid-to-grid transform.
+Fused polygon reducers still use the default mean-preserving method; to use
+conservative regridding before polygon reduction, resample explicitly first.</p>
 <p>If the refined field is only a stepping stone to <strong>per-polygon values</strong>, you don't need
 <span class="arithmatex">\(\mathbf{T}\)</span> at all — go through <code>reduce(..., target_resolution=…)</code>, which
 <a href="../../concepts/reduce-operator/">fuses the resample into the stencil</a> and never builds
 the fine grid:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># materialises the fine field (you want the grid)</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">fine</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">resample_grid</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">target_resolution</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">iterations</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="c1"># never materialises the fine field (you want polygon values)</span>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="n">out</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">geoms</span><span class="p">,</span> <span class="n">target_resolution</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">resample_iterations</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># materialises the fine field (you want the grid)</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">fine</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">resample_grid</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">target_resolution</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">iterations</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># never materialises the fine field (you want polygon values)</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="n">out</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">geoms</span><span class="p">,</span> <span class="n">target_resolution</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">resample_iterations</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="handling-descending-latitudes">Handling descending latitudes<a class="headerlink" href="#handling-descending-latitudes" title="Permanent link">&para;</a></h2>
 <p>ECMWF and many GRIB products ship latitudes <strong>descending</strong> (90 → −90). geohalo's
@@ -1335,7 +1410,7 @@ Ascending and descending versions of the same source grid share one cache entry.
 the resampler's source grid and raises <code>ValueError</code> on a mismatch, even when the
 grid shapes are identical. Target coordinates keep the order supplied when the
 resampler was built.</p>
-<p>If you multiply <code>Resampler.transform_matrix</code> directly, or call
+<p>For the mean-preserving method, if you multiply <code>Resampler.transform_matrix</code> directly, or call
 <code>FactoredResampler.apply_flat</code>, flatten source values with <strong>ascending latitude</strong>
 and longitude in <code>source_lon</code> order. This corrects the convention in 1.1.0, where
 matrices built from descending latitudes expected descending values, causing the

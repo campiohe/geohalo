@@ -16,7 +16,7 @@
         <link rel="prev" href="../latitude-correction/">
       
       
-        <link rel="next" href="../reduce-operator/">
+        <link rel="next" href="../conservative/">
       
       
         
@@ -321,6 +321,8 @@
   
     
     
+      
+        
       
         
       
@@ -645,6 +647,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../conservative/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conservative regridding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1158,6 +1188,12 @@
 
 
 <h1 id="mean-preserving-downscaling">Mean-preserving downscaling<a class="headerlink" href="#mean-preserving-downscaling" title="Permanent link">&para;</a></h1>
+<p>This is geohalo's default <code>method="meanpreserving"</code>, intended for smooth
+refinement. It preserves an <strong>unweighted mean over nearest-parent children</strong>,
+not a spherical-area integral. When coarsening, it is not an area-weighted block
+average; at discontinuities it can overshoot or become negative. Choose
+<a href="../conservative/"><code>method="conservative"</code></a> for area-overlap averages and
+bounded fields. The two methods intentionally remain separate.</p>
 <p>Many polygons are smaller than a single grid cell. <a href="../exact-coverage/">Exact coverage</a>
 will still answer — it returns the value of the cell the polygon sits in — but that
 answer is flat across the whole cell. geohalo can do better by <strong>refining the grid</strong>

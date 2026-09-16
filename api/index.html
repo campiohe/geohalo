@@ -336,6 +336,8 @@
       
         
       
+        
+      
     
     
     
@@ -503,6 +505,34 @@
     
   
     Mean-preserving downscaling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/conservative/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conservative regridding
   
 
     
@@ -1225,6 +1255,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#geohalo.Resampler.coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        coverage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#geohalo.Resampler.apply_grid" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1660,6 +1701,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#geohalo.Resampler.coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        coverage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#geohalo.Resampler.apply_grid" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1810,7 +1862,7 @@ entry point comes in a <strong>convenience</strong> form (builds the operator fo
 <tr>
 <td><code>resample_grid</code></td>
 <td><code>resample_grid_with_matrix</code></td>
-<td><a href="../concepts/downscaling/"><code>Resampler</code></a></td>
+<td><a href="../guides/resampling/"><code>Resampler</code></a></td>
 </tr>
 <tr>
 <td><code>aggregate_bias</code></td>
@@ -2001,7 +2053,11 @@ integer inputs keep normal promotion, including floating-point means.</p>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">lon_dim</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;longitude&quot;</span><span class="p">,</span>
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">iterations</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">period</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">T</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">method</span><span class="p">:</span> <span class="n">ResampleMethod</span> <span class="o">=</span> <span class="s2">&quot;meanpreserving&quot;</span><span class="p">,</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">normalization</span><span class="p">:</span> <span class="n">Normalization</span> <span class="o">=</span> <span class="s2">&quot;destination&quot;</span><span class="p">,</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">source_bounds</span><span class="p">:</span> <span class="n">GridBounds</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">skipna</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">T</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents first">
@@ -2009,7 +2065,12 @@ integer inputs keep normal promotion, including floating-point means.</p>
         <p>Resample at a target spacing; <code>period</code> makes longitude a full cycle.</p>
 <p><code>period=360</code> wraps interpolation and parent assignment at the seam. The
 generated longitude centres start at the source minimum and exclude its
-repeated endpoint. <code>period=None</code> retains clamped, min/max-based targets.</p>
+repeated endpoint. <code>period=None</code> retains clamped, min/max-based targets.
+<code>method='conservative'</code> uses spherical area overlaps, with optional
+<code>normalization='covered'</code> or apply-time <code>skipna=True</code>. Target generation
+still uses source centres, not their outer cell bounds; use an explicitly
+built Resampler for matched source/target footprints. <code>source_bounds</code> is
+an optional pair of latitude/longitude edge arrays (conservative only).</p>
 
 
     </div>
@@ -2030,14 +2091,17 @@ repeated endpoint. <code>period=None</code> retains clamped, min/max-based targe
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="o">*</span><span class="p">,</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">lat_dim</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;latitude&quot;</span><span class="p">,</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">lon_dim</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;longitude&quot;</span><span class="p">,</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">T</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">skipna</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">T</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents first">
 
         <p>Resample a matching source grid, accepting either latitude orientation.</p>
 <p>Raises <code>ValueError</code> if the source coordinates differ from the resampler's
-source grid. Output coordinates follow the resampler's target order.</p>
+source grid. Output coordinates follow the resampler's target order.
+For conservative resamplers, <code>skipna=True</code> averages only valid covered
+area; by default contributing NaNs propagate. Unmapped cells return NaN.</p>
 
 
     </div>
@@ -2503,6 +2567,9 @@ explicit chunk sizes instead. Dask and Zarr are not required dependencies.</p>
 <p>Target rows retain the supplied coordinate order. Direct matrix callers must
 flatten source values in <code>(source_lat, source_lon)</code> order; the xarray API
 handles descending source latitudes automatically.</p>
+<p>The default mean-preserving method stores <code>transform_matrix</code>. Conservative
+resampling instead stores <code>axis_weights=(latitude, longitude)</code> and leaves
+<code>transform_matrix=None</code>; use <code>apply_grid</code> for either representation.</p>
 
 
 
@@ -2522,6 +2589,30 @@ handles descending source latitudes automatically.</p>
 
 
 
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="geohalo.Resampler.coverage" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">coverage</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#geohalo.Resampler.coverage" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">coverage</span><span class="p">:</span> <span class="n">ndarray</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Source-covered fraction of each target cell (conservative only).</p>
+
+    </div>
+
+</div>
+
 
 
 
@@ -2534,15 +2625,22 @@ handles descending source latitudes automatically.</p>
 
 <a href="#geohalo.Resampler.apply_grid" class="headerlink" title="Permanent link">&para;</a></h4>
 <div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">apply_grid</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">values</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">descending</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">values</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="o">*</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">descending</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">skipna</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
 
         <p>Transform (..., latitude, longitude) values into (..., n_target).</p>
 <p><code>descending=True</code> interprets source rows in descending latitude order.
-Temporary dense allocations are bounded per slice or small batch block.</p>
+Temporary dense allocations are bounded per slice or small batch block.
+Conservative resamplers use two 1-D contractions per slice. Uncovered
+cells return NaN. For this method only, <code>skipna=True</code> renormalizes over
+valid covered area, overriding destination-area normalization; all
+missing cells return NaN. The default propagates contributing NaNs.</p>
 
 
     </div>
@@ -2569,15 +2667,29 @@ Temporary dense allocations are bounded per slice or small batch block.</p>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="o">*</span><span class="p">,</span>
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">iterations</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">period</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Resampler</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">method</span><span class="p">:</span> <span class="n">ResampleMethod</span> <span class="o">=</span> <span class="s2">&quot;meanpreserving&quot;</span><span class="p">,</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">normalization</span><span class="p">:</span> <span class="n">Normalization</span> <span class="o">=</span> <span class="s2">&quot;destination&quot;</span><span class="p">,</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">source_bounds</span><span class="p">:</span> <span class="n">GridBounds</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">target_bounds</span><span class="p">:</span> <span class="n">GridBounds</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Resampler</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
 
-        <p>Build a mean-preserving transform; <code>period</code> wraps longitude only.</p>
+        <p>Build a mean-preserving or separable conservative grid transform.</p>
 <p>The default clamps both axes. Set <code>period=360</code> for cyclic longitude,
 with no repeated source endpoint. Explicit target coordinates retain
 their values and order, including targets outside the source cycle.</p>
+<p><code>method='conservative'</code> averages spherical cell overlaps using two
+1-D <code>axis_weights</code>; <code>transform_matrix</code> is None. <code>normalization</code> is
+'destination' (full target area) or 'covered' (source-covered area).
+Optional <code>source_bounds</code>/<code>target_bounds</code> are (latitude, longitude)
+edge arrays, each one longer than its coordinate axis, in that axis's
+order. Otherwise midpoint edges are inferred (latitude clipped at the
+poles, cyclic source longitude when periodic). Singleton noncyclic axes
+require bounds. Conservative axes must be strictly monotonic, and
+<code>iterations</code> must remain 1. Geometries and existing reducers are not
+changed by this grid-resampling option.</p>
 
 
     </div>

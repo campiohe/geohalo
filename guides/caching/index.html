@@ -338,6 +338,8 @@
       
         
       
+        
+      
     
     
     
@@ -505,6 +507,34 @@
     
   
     Mean-preserving downscaling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/conservative/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conservative regridding
   
 
     
@@ -1122,7 +1152,7 @@ The cache is what makes "once" stick across processes, machines, and repeated ru
 </tr>
 <tr>
 <td><code>Resampler</code></td>
-<td>source/target coords + iterations + period</td>
+<td>source/target coords + method + iterations + period + normalization + optional bounds</td>
 <td><code>get_or_compute_resampler</code></td>
 </tr>
 <tr>
@@ -1190,6 +1220,17 @@ and equivalent NumPy scalar values share a key. Restricted plans inherit the
 period through the fused operator digest. Existing <code>period=None</code> keys and
 payload formats are unchanged. The built matrices already encode the period,
 so no additional apply-time argument or cache metadata is needed.</p>
+<p>For conservative resampling, <code>get_or_compute_resampler</code> also accepts
+<code>method="conservative"</code>, <code>normalization</code>, <code>source_bounds</code>, and <code>target_bounds</code>.
+These build options distinguish cache entries; apply-time <code>skipna</code> does not.
+Source latitude bounds reverse with descending source latitudes, so the
+ascending/descending twins still reuse one entry. Explicit versus inferred
+bounds may have different keys even if they describe the same physical cells.</p>
+<p>Conservative resampler payloads use a separate version-2 representation holding
+the two sparse axis matrices and normalization, with no Kronecker matrix.
+Existing mean-preserving version-1 payloads and default digests still work.
+Other operator payload versions do not change. Both representations currently
+use the same trusted pickle-based cache backend.</p>
 <p><code>Stencil</code>, <code>ReduceOperator</code>, and <code>RestrictedOperator</code> payloads store canonical
 row order. Their cache methods return <strong>caller-ordered</strong> objects: stencil rows
 follow <code>geoms.index</code>, fused rows follow <code>stencil.keys</code>, and restricted rows follow
