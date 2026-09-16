@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://campiohe.github.io/geohalo/guides/caching/">
       
       
-        <link rel="prev" href="../../concepts/bias-tree/">
+        <link rel="prev" href="../../concepts/serialization/">
       
       
         <link rel="next" href="../resampling/">
@@ -319,6 +319,8 @@
   
     
     
+      
+        
       
         
       
@@ -647,6 +649,34 @@
     
   
     Hierarchical rollups
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/serialization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portable operator artifacts
   
 
     
@@ -1182,10 +1212,13 @@ the object</em>. A hit returns the stored blob and never runs the expensive buil
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">force</span><span class="p">:</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>        <span class="n">blob</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load</span><span class="p">(</span><span class="n">namespace</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>        <span class="k">if</span> <span class="n">blob</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>            <span class="k">return</span> <span class="n">deserialize</span><span class="p">(</span><span class="n">blob</span><span class="p">)</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">obj</span> <span class="o">=</span> <span class="n">compute</span><span class="p">()</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="p">(</span><span class="n">namespace</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">serialize</span><span class="p">(</span><span class="n">obj</span><span class="p">))</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="k">return</span> <span class="n">obj</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>            <span class="n">obj</span> <span class="o">=</span> <span class="n">deserialize</span><span class="p">(</span><span class="n">blob</span><span class="p">)</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>            <span class="k">if</span> <span class="n">obj</span><span class="o">.</span><span class="n">digest</span> <span class="o">!=</span> <span class="n">digest</span><span class="p">:</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;cached object digest does not match requested inputs&quot;</span><span class="p">)</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>            <span class="k">return</span> <span class="n">obj</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">obj</span> <span class="o">=</span> <span class="n">compute</span><span class="p">()</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="p">(</span><span class="n">namespace</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">serialize</span><span class="p">(</span><span class="n">obj</span><span class="p">))</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="k">return</span> <span class="n">obj</span>
 </span></code></pre></div>
 <p>Because the key is derived from inputs, <strong>any change to those inputs invalidates the
 cache implicitly</strong> — edit a polygon, flip the spherical flag, change the iteration count,
@@ -1205,20 +1238,20 @@ invalidation to forget.</p>
 </ul>
 <p>Geometry hashing uses vectorised WKB encoding. During stencil construction, the
 same encoded bytes are reused for extraction and hashing. The digest byte format
-is unchanged for default float64 coefficients and <code>period=None</code>, so existing stencil and
-dependent reduce-operator cache entries remain valid.</p>
+is unchanged for default float64 coefficients and <code>period=None</code>. The storage
+format has changed to NPZ; see <a href="../../concepts/serialization/#migrating-existing-caches">migration</a>.</p>
 <p>Both stencil and fused-operator cache methods accept <code>dtype=np.float32</code>, matching
 their builders. Dtype aliases normalize to the same native float32/float64 type
 before hashing; different coefficient dtypes use different cache entries.
 Restricted plans inherit that distinction through the fused operator digest.
-No payload-version change is needed: coefficient arrays already carry their dtype.
+NPZ coefficient arrays carry their dtype.
 The apply-time <code>preserve_dtype=True</code> flag does not affect cache keys.</p>
 <p>Resampler and fused-operator cache methods accept <code>period=360</code> for
 <a href="../resampling/#periodic-longitude">cyclic longitude sampling</a>. Periodic and
 nonperiodic builds use distinct keys, as do different periods; <code>360</code>, <code>360.0</code>,
 and equivalent NumPy scalar values share a key. Restricted plans inherit the
-period through the fused operator digest. Existing <code>period=None</code> keys and
-payload formats are unchanged. The built matrices already encode the period,
+period through the fused operator digest. Existing <code>period=None</code> input digests
+are unchanged. The built matrices already encode the period,
 so no additional apply-time argument or cache metadata is needed.</p>
 <p>For conservative resampling, <code>get_or_compute_resampler</code> also accepts
 <code>method="conservative"</code>, <code>normalization</code>, <code>source_bounds</code>, and <code>target_bounds</code>.
@@ -1226,17 +1259,15 @@ These build options distinguish cache entries; apply-time <code>skipna</code> do
 Source latitude bounds reverse with descending source latitudes, so the
 ascending/descending twins still reuse one entry. Explicit versus inferred
 bounds may have different keys even if they describe the same physical cells.</p>
-<p>Conservative resampler payloads use a separate version-2 representation holding
-the two sparse axis matrices and normalization, with no Kronecker matrix.
-Existing mean-preserving version-1 payloads and default digests still work.
-Other operator payload versions do not change. Both representations currently
-use the same trusted pickle-based cache backend.</p>
+<p>Both resampler representations use NPZ schema version 1, distinguished by the
+<code>method</code> metadata field. Conservative payloads hold two sparse axis matrices
+and normalization, with no Kronecker matrix. Mean-preserving payloads hold the
+full CSR transform. Default input digests are unchanged.</p>
 <p><code>Stencil</code>, <code>ReduceOperator</code>, and <code>RestrictedOperator</code> payloads store canonical
 row order. Their cache methods return <strong>caller-ordered</strong> objects: stencil rows
 follow <code>geoms.index</code>, fused rows follow <code>stencil.keys</code>, and restricted rows follow
 <code>operator.keys</code>. Cache hits permute sparse rows, normalizers, and labels together;
-they never rerun geometry extraction, fusion, or read-plan construction. Existing
-sorted payloads work without migration. A digest identifies the canonical
+they never rerun geometry extraction, fusion, or read-plan construction. A digest identifies the canonical
 operator, not its returned row layout; use <code>keys</code> to interpret matrix rows.</p>
 <p>Duplicate labels remain distinct positional rows. Their existing hashing
 behavior is unchanged: permuting different geometries with the same label can
@@ -1246,7 +1277,7 @@ polygon permutations.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">LocalCache</label><label for="__tabbed_1_2">RedisCache</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
-<p>Pickle files under <code>path/&lt;namespace&gt;/&lt;key&gt;.pkl</code>, published atomically (write to a
+<p>NPZ files under <code>path/&lt;namespace&gt;/&lt;key&gt;.npz</code>, published atomically (write to a
 <code>.tmp</code>, then <code>replace</code>) so a crash can't leave a half-written blob.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">geohalo</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ghl</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
@@ -1257,7 +1288,7 @@ polygon permutations.</p>
 </span></code></pre></div>
 </div>
 <div class="tabbed-block">
-<p>Values under <code>&lt;prefix&gt;:&lt;key&gt;</code> in Redis — for sharing the precompute across workers or
+<p>NPZ bytes under <code>geohalo:&lt;namespace&gt;:npz:v1:&lt;key&gt;</code> in Redis — for sharing the precompute across workers or
 machines. Requires the <code>redis</code> extra.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">redis</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">geohalo</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ghl</span>
@@ -1271,8 +1302,23 @@ machines. Requires the <code>redis</code> extra.</p>
 </div>
 </div>
 <p>Both backends share all of the get-or-compute and serialisation logic; they differ only
-in the <code>_load</code> / <code>_store</code> primitives. Serialised payloads carry a <code>version</code> field so a
-format change is rejected loudly rather than mis-read.</p>
+in the <code>_load</code> / <code>_store</code> primitives. Payloads contain numeric arrays and typed
+JSON metadata, including schema and writer versions. Loading always uses
+<code>allow_pickle=False</code> and validates structure; cache hits also check the full
+stored input digest, not just the truncated storage key. A malformed hit raises
+an error; use <code>force_recompute=True</code> to replace it explicitly.</p>
+<p>The same bytes are available through <code>obj.to_npz()</code> and
+<code>Class.from_npz(blob)</code> for database/object-store persistence. See
+<a href="../../concepts/serialization/">portable operator artifacts</a> for the schema,
+supported key types, and security boundaries. Custom Python object labels are
+not serializable; use supported scalar or tuple labels instead.</p>
+<div class="admonition warning">
+<p class="admonition-title">One-time rebuild after upgrading from pickle caches</p>
+<p>Existing <code>.pkl</code> files and old Redis prefixes are ignored, not loaded or
+deleted. The first request for each object rebuilds it into NPZ. There is no
+automatic pickle migration fallback. Input digests are unchanged, and old
+and new deployments use separate storage names.</p>
+</div>
 <h2 id="which-object-should-i-cache">Which object should I cache?<a class="headerlink" href="#which-object-should-i-cache" title="Permanent link">&para;</a></h2>
 <pre class="mermaid"><code>flowchart TD
     Q1{"reducing over a&lt;br/&gt;refined grid?"}
@@ -1290,7 +1336,8 @@ many grid slices.</p>
 </span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">out</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce_with_operator</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">op</span><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="cache-miss-vs-hit-measured">Cache miss vs hit, measured<a class="headerlink" href="#cache-miss-vs-hit-measured" title="Permanent link">&para;</a></h2>
-<p>From the <a href="../../performance/">benchmark report</a>, building once and loading thereafter:</p>
+<p>Historical measurements from the <a href="../../performance/">benchmark report</a>, using
+the previous cache format; NPZ loading costs have not been rebenchmarked here:</p>
 <table>
 <thead>
 <tr>
@@ -1325,8 +1372,8 @@ many grid slices.</p>
 </tr>
 </tbody>
 </table>
-<p>The first run pays for the geometry; every run after it pays for a <code>read_bytes</code> and an
-<code>unpickle</code>.</p>
+<p>The first run pays for the geometry; subsequent runs read NPZ arrays and rebuild
+the lightweight operator wrapper without recomputing geometry or fusion.</p>
 <div class="admonition tip">
 <p class="admonition-title">Force a rebuild</p>
 <p>Every <code>get_or_compute_*</code> takes <code>force_recompute=True</code> to bypass the cache and

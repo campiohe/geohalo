@@ -16,7 +16,7 @@
         <link rel="prev" href="../masked/">
       
       
-        <link rel="next" href="../../guides/caching/">
+        <link rel="next" href="../serialization/">
       
       
         
@@ -321,6 +321,8 @@
   
     
     
+      
+        
       
         
       
@@ -775,6 +777,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../serialization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portable operator artifacts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1197,7 +1227,8 @@ convergence test. This avoids repeatedly copying and adding individual sparse
 rows. Build cost still depends on tree depth and the number of leaf–ancestor
 coefficients in the result; very deep chains need more products than shallow trees.</p>
 <p>Node ordering is unchanged: leaves sorted by <code>repr</code>, then internal nodes by
-depth and <code>repr</code>. Cache digests and payloads are unchanged as well.</p>
+depth and <code>repr</code>. Cache input digests are unchanged; payloads now use
+<a href="../serialization/">portable NPZ serialization</a>.</p>
 <h2 id="usage">Usage<a class="headerlink" href="#usage" title="Permanent link">&para;</a></h2>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">geohalo</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ghl</span>

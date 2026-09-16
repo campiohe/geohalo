@@ -342,6 +342,8 @@
       
         
       
+        
+      
     
     
     
@@ -751,6 +753,34 @@
     
   
     Hierarchical rollups
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../serialization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portable operator artifacts
   
 
     
@@ -1257,7 +1287,8 @@ change the separate <code>skipna</code> behavior of prebuilt polygon reducers.</
 <p><code>LocalCache.get_or_compute_resampler</code> and its Redis counterpart accept the same
 method, normalization, period, and bounds options. Cache hits restore the two
 axis factors without rebuilding; <code>skipna</code> is apply-time and does not change the
-key. Existing mean-preserving cache entries remain valid.</p>
+key. Both methods use the <a href="../serialization/">portable NPZ format</a>; input digests
+are unchanged, while legacy pickle cache entries require a one-time rebuild.</p>
 <p>Conservative coefficients and real-valued results use float64. Work is bounded
 per batch slice, including missing-data masks and reversed/strided inputs; the
 dense output still needs to fit in memory. As before, the xarray resampling

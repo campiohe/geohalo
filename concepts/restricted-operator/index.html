@@ -342,6 +342,8 @@
       
         
       
+        
+      
     
     
     
@@ -762,6 +764,34 @@
     
   
     Hierarchical rollups
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../serialization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portable operator artifacts
   
 
     
@@ -1289,7 +1319,8 @@ create and apply a separate plan per layout. Use <code>lat_dim</code>, <code>lon
 normalized spatial chunk sizes. Unlike the canonical fused operator, ascending
 and descending read plans have different digests. Regular integer chunk sizes
 and equivalent explicit tuples share a cache entry. Batch sizes/chunks and grid
-values are not part of the key. Existing operator cache formats are unchanged.</p>
+values are not part of the key. Plans use the same
+<a href="../serialization/">portable NPZ format</a> as the other cached operators.</p>
 <h2 id="missing-values-and-limitations">Missing values and limitations<a class="headerlink" href="#missing-values-and-limitations" title="Permanent link">&para;</a></h2>
 <p>The xarray and NumPy entry points share the same opt-in:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">out</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce_with_restricted_operator</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">restricted</span><span class="p">,</span> <span class="n">skipna</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>

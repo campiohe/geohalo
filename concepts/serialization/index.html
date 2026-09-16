@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://campiohe.github.io/geohalo/concepts/downscaling/">
+        <link rel="canonical" href="https://campiohe.github.io/geohalo/concepts/serialization/">
       
       
-        <link rel="prev" href="../latitude-correction/">
+        <link rel="prev" href="../bias-tree/">
       
       
-        <link rel="next" href="../conservative/">
+        <link rel="next" href="../../guides/caching/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Mean-preserving downscaling - geohalo</title>
+        <title>Portable operator artifacts - geohalo</title>
       
     
     
@@ -82,7 +82,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#mean-preserving-downscaling" class="md-skip">
+        <a href="#portable-operator-artifacts" class="md-skip">
           Skip to content
         </a>
       
@@ -117,7 +117,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Mean-preserving downscaling
+              Portable operator artifacts
             
           </span>
         </div>
@@ -500,37 +500,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Mean-preserving downscaling
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../downscaling/" class="md-nav__link">
         
   
   
@@ -546,109 +519,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#the-contract" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The contract
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#construction" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Construction
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#collapsing-to-a-matrix" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Collapsing to a matrix
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Collapsing to a matrix">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#why-the-mean-is-preserved-exactly" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Why the mean is preserved exactly
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#cost-never-materialise-mathbfg" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Cost: never materialise \(\mathbf{G}\)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#two-forms-of-the-resampler" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Two forms of the resampler
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#using-it" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Using it
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -798,10 +668,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../serialization/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portable operator artifacts
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -817,6 +714,109 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-survives-a-roundtrip" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What survives a roundtrip
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#supported-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supported keys
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#npz-schema-version-1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        NPZ schema version 1
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="NPZ schema version 1">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#common-members" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common members
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#object-specific-members" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Object-specific members
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#validation-and-trust" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validation and trust
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#migrating-existing-caches" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migrating existing caches
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1115,10 +1115,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-contract" class="md-nav__link">
+  <a href="#what-survives-a-roundtrip" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The contract
+        What survives a roundtrip
       
     </span>
   </a>
@@ -1126,10 +1126,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#construction" class="md-nav__link">
+  <a href="#supported-keys" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Construction
+        Supported keys
       
     </span>
   </a>
@@ -1137,22 +1137,33 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#collapsing-to-a-matrix" class="md-nav__link">
+  <a href="#npz-schema-version-1" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Collapsing to a matrix
+        NPZ schema version 1
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Collapsing to a matrix">
+    <nav class="md-nav" aria-label="NPZ schema version 1">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#why-the-mean-is-preserved-exactly" class="md-nav__link">
+  <a href="#common-members" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Why the mean is preserved exactly
+        Common members
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#object-specific-members" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Object-specific members
       
     </span>
   </a>
@@ -1165,10 +1176,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#cost-never-materialise-mathbfg" class="md-nav__link">
+  <a href="#validation-and-trust" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Cost: never materialise \(\mathbf{G}\)
+        Validation and trust
       
     </span>
   </a>
@@ -1176,21 +1187,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#two-forms-of-the-resampler" class="md-nav__link">
+  <a href="#migrating-existing-caches" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Two forms of the resampler
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#using-it" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Using it
+        Migrating existing caches
       
     </span>
   </a>
@@ -1217,163 +1217,214 @@
   
 
 
-<h1 id="mean-preserving-downscaling">Mean-preserving downscaling<a class="headerlink" href="#mean-preserving-downscaling" title="Permanent link">&para;</a></h1>
-<p>This is geohalo's default <code>method="meanpreserving"</code>, intended for smooth
-refinement. It preserves an <strong>unweighted mean over nearest-parent children</strong>,
-not a spherical-area integral. When coarsening, it is not an area-weighted block
-average; at discontinuities it can overshoot or become negative. Choose
-<a href="../conservative/"><code>method="conservative"</code></a> for area-overlap averages and
-bounded fields. The two methods intentionally remain separate.</p>
-<p>Many polygons are smaller than a single grid cell. <a href="../exact-coverage/">Exact coverage</a>
-will still answer — it returns the value of the cell the polygon sits in — but that
-answer is flat across the whole cell. geohalo can do better by <strong>refining the grid</strong>
-first, using neighbouring cells to give sub-cell polygons a sharper estimate.</p>
-<p>The catch: a naive upsample (plain bilinear) <strong>drifts off the published cell mean</strong>.
-geohalo's <code>Resampler</code> refines <em>without</em> breaking the contract that the grid encodes —
-the average of a parent cell's children equals the parent's original value, exactly.</p>
-<h2 id="the-contract">The contract<a class="headerlink" href="#the-contract" title="Permanent link">&para;</a></h2>
-<p>A gridded field publishes <strong>cell means</strong>. A refinement that respects this must satisfy,
-for every source cell <span class="arithmatex">\(s\)</span> and its set of target children <span class="arithmatex">\(\{t : \pi(t) = s\}\)</span>:</p>
-<div class="arithmatex">\[
-\frac{1}{n_s}\sum_{\pi(t)=s} y_t \;=\; x_s
-\]</div>
-<p>Plain bilinear interpolation does not — it smooths across cell boundaries and quietly
-shifts each cell's average. The figure below shows the gap in one dimension:</p>
-<figure>
-<p><img alt="1-D mean-preserving downscaling" src="../../figures/downscale-1d.png" width="780" /></p>
-<figcaption>
-A 5-cell source field refined ~16×. Raw bilinear (dashed) is smooth but its average over
-each cell no longer equals the source value. The mean-preserving curves (amber/rust) add
-a correction so the integral over every shaded cell returns to the source mean — for any
-iteration count. More iterations trade a little overshoot for more smoothness.
-</figcaption>
-</figure>
-<p>And on a real ECMWF precipitation field over eastern Brazil:</p>
-<figure>
-<p><img alt="Mean-preserving 4× downscaling of ECMWF tp" src="../../figures/mean-preserving-downscale.png" width="860" /></p>
-<figcaption>
-Native cell-mean field, raw bilinear (not mean-preserving), and 1 / 2 / 4 / 10 iterations
-of the mean-preserving kernel. Every refined panel preserves each parent cell's mean
-exactly; iterations only change smoothness.
-</figcaption>
-</figure>
-<h2 id="construction">Construction<a class="headerlink" href="#construction" title="Permanent link">&para;</a></h2>
-<p>From the source and target coordinate arrays, geohalo builds three
-<strong>value-independent</strong> sparse matrices (<code>geohalo.resampler._build_factors</code>):</p>
-<ul>
-<li><span class="arithmatex">\(\mathbf{B}\)</span> — <strong>bilinear interpolation</strong>, target ← source. Separable as
-  <span class="arithmatex">\(\mathbf{B} = \mathbf{B}_\text{lat} \otimes \mathbf{B}_\text{lon}\)</span>, each 1-D factor
-  mapping source centres to target centres with clamped edges by default
-  (<code>bilinear_matrix_1d</code>).</li>
-<li><span class="arithmatex">\(\pi\)</span> — a <strong>nearest-cell assignment</strong> of each target cell to its parent source cell
-  (<code>nearest_index</code>). From it:<ul>
-<li><span class="arithmatex">\(\mathbf{P}\)</span> — source → target <strong>broadcast</strong>: <span class="arithmatex">\(P_{t,\pi(t)} = 1\)</span>.</li>
-<li><span class="arithmatex">\(\mathbf{A}\)</span> — source ← target <strong>mean</strong>: <span class="arithmatex">\(A_{s,t} = 1/n_s\)</span> when
-  <span class="arithmatex">\(\pi(t) = s\)</span>, where <span class="arithmatex">\(n_s\)</span> is the number of target cells assigned to source
-  cell <span class="arithmatex">\(s\)</span>. A source cell with no children has an all-zero row.</li>
-</ul>
-</li>
-</ul>
-<p>With <code>period=360</code>, both the longitude factor of <span class="arithmatex">\(\mathbf{B}\)</span> and longitude
-parent assignment wrap at the seam. Latitude remains clamped, and the same
-mean-preservation proof applies to these cyclic parents. See
-<a href="../../guides/resampling/#periodic-longitude">periodic longitude</a> for source
-validation, full-cycle target generation, and polygon-coordinate limitations.</p>
-<p>The refinement is an <strong>interpolate-and-correct</strong> loop, linear in the source values
-<span class="arithmatex">\(\mathbf{x}\)</span>:</p>
-<div class="arithmatex">\[
-\begin{aligned}
-\mathbf{y}_0 &amp;= \mathbf{B}\,\mathbf{x} \\[2pt]
-\text{smooth} \times (\text{iter}-1): \quad
-\mathbf{y} &amp;\leftarrow \mathbf{y} + \mathbf{B}\,(\mathbf{x} - \mathbf{A}\,\mathbf{y}) \\[2pt]
-\text{hard correction}: \quad
-\mathbf{y} &amp;\leftarrow \mathbf{y} + \mathbf{P}\,(\mathbf{x} - \mathbf{A}\,\mathbf{y})
-\end{aligned}
-\]</div>
-<p>Each line measures the residual between the source value and the current average of its
-children (<span class="arithmatex">\(\mathbf{x} - \mathbf{A}\mathbf{y}\)</span>) and adds it back — smoothly through
-<span class="arithmatex">\(\mathbf{B}\)</span> during the iterations, then sharply through <span class="arithmatex">\(\mathbf{P}\)</span> at the end.</p>
-<h2 id="collapsing-to-a-matrix">Collapsing to a matrix<a class="headerlink" href="#collapsing-to-a-matrix" title="Permanent link">&para;</a></h2>
-<p>Because every step is linear, the whole loop collapses to a single transform
-<span class="arithmatex">\(\mathbf{T}\)</span> with <span class="arithmatex">\(\mathbf{y} = \mathbf{T}\mathbf{x}\)</span>:</p>
-<div class="arithmatex">\[
-\mathbf{G} = \mathbf{I} - \mathbf{B}\mathbf{A}, \qquad
-\mathbf{y}_\text{op} = \Bigl(\sum_{j=0}^{\text{iter}-1} \mathbf{G}^{\,j}\Bigr)\mathbf{B}, \qquad
-\mathbf{T} = \mathbf{y}_\text{op} + \mathbf{P}\,(\mathbf{I} - \mathbf{A}\,\mathbf{y}_\text{op})
-\]</div>
-<h3 id="why-the-mean-is-preserved-exactly">Why the mean is preserved exactly<a class="headerlink" href="#why-the-mean-is-preserved-exactly" title="Permanent link">&para;</a></h3>
-<p>The hard correction is what guarantees the contract. Since <span class="arithmatex">\(\mathbf{A}\mathbf{P} =
-\operatorname{diag}(n_s &gt; 0)\)</span>, applying <span class="arithmatex">\(\mathbf{A}\)</span> to <span class="arithmatex">\(\mathbf{T}\)</span> gives</p>
-<div class="arithmatex">\[
-\mathbf{A}\mathbf{T} = \mathbf{I}
-\]</div>
-<p>on every source cell that has at least one child — i.e. averaging a source cell's target
-children recovers the source value <strong>exactly</strong>, for any iteration count. This always
-holds when refining; when coarsening, a source cell with no assigned target can't be
-preserved (geometrically unavoidable, and geohalo leaves those rows zero).</p>
-<div class="admonition note">
-<p class="admonition-title">The classic operator is the one-iteration case</p>
-<p>With <code>iterations = 1</code> the series has a single term and the transform reduces to the
-textbook downscaling operator
-<span class="arithmatex">\(\mathbf{M} = \mathbf{B} + \mathbf{P} - \mathbf{P}\mathbf{A}\mathbf{B}\)</span>.
-Higher iteration counts are the N-term generalisation: the correction reaches
-further across the grid, smoothing the result while still preserving every mean.</p>
-</div>
-<h2 id="cost-never-materialise-mathbfg">Cost: never materialise <span class="arithmatex">\(\mathbf{G}\)</span><a class="headerlink" href="#cost-never-materialise-mathbfg" title="Permanent link">&para;</a></h2>
-<p><span class="arithmatex">\(\mathbf{G} = \mathbf{I} - \mathbf{B}\mathbf{A}\)</span> is an
-<span class="arithmatex">\(N_\text{target} \times N_\text{target}\)</span> operator that <strong>densifies</strong> under repeated
-products — forming its powers directly would be ruinous. geohalo never does. It
-accumulates the series by applying <span class="arithmatex">\(\mathbf{G}\)</span> to <span class="arithmatex">\(\mathbf{B}\)</span> <strong>on the right</strong>, so
-every intermediate stays <span class="arithmatex">\(N_\text{target} \times N_\text{source}\)</span>:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">acc</span> <span class="o">=</span> <span class="n">term</span> <span class="o">=</span> <span class="n">B</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">iterations</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">term</span> <span class="o">=</span> <span class="n">term</span> <span class="o">-</span> <span class="n">B</span> <span class="o">@</span> <span class="p">(</span><span class="n">A</span> <span class="o">@</span> <span class="n">term</span><span class="p">)</span>   <span class="c1"># term @ G, but kept thin</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">acc</span> <span class="o">=</span> <span class="n">acc</span> <span class="o">+</span> <span class="n">term</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">y_op</span> <span class="o">=</span> <span class="n">acc</span>
+<h1 id="portable-operator-artifacts">Portable operator artifacts<a class="headerlink" href="#portable-operator-artifacts" title="Permanent link">&para;</a></h1>
+<p><code>Stencil</code>, <code>ReduceOperator</code>, <code>Resampler</code>, <code>RestrictedOperator</code>, and <code>BiasTree</code>
+all expose the same byte-oriented API:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">geohalo</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ghl</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># Build once, then store in a file, database bytea column, or object store.</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">operator</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">ReduceOperator</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">stencil</span><span class="p">,</span> <span class="n">source_lat</span><span class="p">,</span> <span class="n">source_lon</span><span class="p">)</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">blob</span><span class="p">:</span> <span class="nb">bytes</span> <span class="o">=</span> <span class="n">operator</span><span class="o">.</span><span class="n">to_npz</span><span class="p">()</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;operator.npz&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">write_bytes</span><span class="p">(</span><span class="n">blob</span><span class="p">)</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># Restore without geometry extraction, resampler construction, or fusion.</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="n">restored</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">ReduceOperator</span><span class="o">.</span><span class="n">from_npz</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;operator.npz&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">read_bytes</span><span class="p">())</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="n">result</span> <span class="o">=</span> <span class="n">restored</span><span class="o">.</span><span class="n">apply_grid</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;mean&quot;</span><span class="p">)</span>
 </span></code></pre></div>
-<p>The dense <span class="arithmatex">\(N_\text{target}^2\)</span> matrix is never built. The build stays sub-second even
-for large refinements; cost grows with <code>iterations</code> only because the transform <em>fills
-in</em> as its reach expands. The default <code>iterations = 1</code> is the cheapest.</p>
-<h2 id="two-forms-of-the-resampler">Two forms of the resampler<a class="headerlink" href="#two-forms-of-the-resampler" title="Permanent link">&para;</a></h2>
-<p>geohalo ships the transform in two shapes for two different needs:</p>
+<p><code>to_npz()</code> returns bytes; <code>from_npz(blob)</code> accepts bytes, not a filename or an
+open file. Use the class matching the stored object. Wrong classes, unknown
+schema versions, missing fields, object arrays, and malformed structures raise
+<code>ValueError</code>. Unsupported custom key types raise <code>TypeError</code> when exporting.</p>
+<p>Both cache backends use this same format. Standalone exports retain the object's
+<strong>current row order</strong>, unlike canonical cache storage; always interpret rows
+using the restored <code>keys</code>. Digests identify build inputs, not row permutations.</p>
+<h2 id="what-survives-a-roundtrip">What survives a roundtrip<a class="headerlink" href="#what-survives-a-roundtrip" title="Permanent link">&para;</a></h2>
+<ul>
+<li>CSR coefficient and index arrays, including dtypes, accumulation order,
+  duplicate entries, and explicit zeros; serialization never sorts or merges
+  matrix entries.</li>
+<li>Source/target coordinates in their stored order, input digests, normalizers,
+  and the object's apply-time configuration.</li>
+<li>Restricted windows, per-window gather positions, and spatial chunk sizes.</li>
+<li>Both resampler representations: the mean-preserving full CSR transform or
+  conservative latitude/longitude factors plus normalization. Conservative
+  exports never materialize a grid-to-grid matrix.</li>
+<li>Index names, dtypes, duplicates, order, MultiIndex levels/codes (including
+  unused levels and missing codes), categorical categories/order, and date/time
+  index frequency and timezone metadata.</li>
+</ul>
+<p>Apply-time caches such as compact matrix views are not serialized. They are
+rebuilt lazily from the restored arrays. Input geometries and original tree
+edges are not included: these are <strong>application-ready operators</strong>, not complete
+recipes for rebuilding them. Options already baked into coefficients (such as
+resampler period and cell bounds) are represented by those coefficients and the
+input digest, not duplicated as a build recipe.</p>
+<h2 id="supported-keys">Supported keys<a class="headerlink" href="#supported-keys" title="Permanent link">&para;</a></h2>
+<p>Flat indexes support NumPy numeric/object dtypes and pandas nullable numeric,
+boolean, and string dtypes. RangeIndex, CategoricalIndex, MultiIndex,
+DatetimeIndex, TimedeltaIndex, PeriodIndex, and IntervalIndex retain their
+specialized metadata. Reading a pandas string index with Arrow storage requires
+the same optional Arrow dependency as constructing that index normally.
+Likewise, pandas 3's NaN-based <code>str</code> dtype needs pandas 3 to restore that exact
+dtype; older pandas can still be used with object indexes or nullable <code>string</code>
+indexes. Unsupported reader-side dtype features fail rather than silently
+changing labels or missing-value semantics.</p>
+<p>Object labels and index names use a fixed typed encoding for Python strings,
+integers, floats, complex numbers, booleans, bytes, tuples (recursively), <code>None</code>,
+<code>pd.NA</code>, <code>pd.NaT</code>, NumPy numeric/string/date/time scalars, Python dates,
+naive/fixed-offset datetimes and timedeltas, and pandas Timestamp, Timedelta, Period and Interval
+scalars. Non-finite numbers are encoded as tagged strings, not nonstandard JSON
+numbers. Integers use decimal strings, preserving values beyond JavaScript's
+integer precision. NumPy scalars include their dtype and hex-encoded bytes.
+Pandas date/time keys support IANA timezone names and UTC fixed offsets; convert
+custom timezone implementations to one of those before exporting. Use pandas
+Timestamp rather than Python datetime labels for IANA zones.</p>
+<p>Arbitrary Python objects, custom Index subclasses, and unlisted extension dtypes
+are deliberately unsupported. Convert such labels to supported values before
+building the operator. There is no implicit <code>repr</code> conversion, dynamic class
+import, <code>eval</code>, or fallback to executable object serialization.</p>
+<h2 id="npz-schema-version-1">NPZ schema version 1<a class="headerlink" href="#npz-schema-version-1" title="Permanent link">&para;</a></h2>
+<p>The container is an uncompressed NumPy NPZ archive: named <code>.npy</code> arrays in a ZIP
+file. Every array is non-object. It can be inspected with NumPy and the standard
+library alone, without importing geohalo, pandas, SciPy, or exactextract:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="k">with</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">(</span><span class="n">blob</span><span class="p">),</span> <span class="n">allow_pickle</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="k">as</span> <span class="n">archive</span><span class="p">:</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="n">metadata</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">archive</span><span class="p">[</span><span class="s2">&quot;metadata&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">tobytes</span><span class="p">()</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">))</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;kind&quot;</span><span class="p">],</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;version&quot;</span><span class="p">],</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;geohalo_version&quot;</span><span class="p">])</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">archive</span><span class="p">[</span><span class="s2">&quot;digest&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">tobytes</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">())</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="n">data</span> <span class="o">=</span> <span class="n">archive</span><span class="p">[</span><span class="s2">&quot;matrix_data&quot;</span><span class="p">]</span>       <span class="c1"># ReduceOperator example</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="n">indices</span> <span class="o">=</span> <span class="n">archive</span><span class="p">[</span><span class="s2">&quot;matrix_indices&quot;</span><span class="p">]</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="n">indptr</span> <span class="o">=</span> <span class="n">archive</span><span class="p">[</span><span class="s2">&quot;matrix_indptr&quot;</span><span class="p">]</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="n">shape</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">archive</span><span class="p">[</span><span class="s2">&quot;matrix_shape&quot;</span><span class="p">])</span>
+</span></code></pre></div>
+<p>This uses NumPy's documented
+<a href="https://numpy.org/doc/stable/reference/generated/numpy.load.html"><code>allow_pickle=False</code> loading mode</a>.
+Reading the arrays is independent of Python class layout; restoring a geohalo
+object and its pandas index still requires the relevant libraries.</p>
+<h3 id="common-members">Common members<a class="headerlink" href="#common-members" title="Permanent link">&para;</a></h3>
+<p><code>metadata</code> is a one-dimensional uint8 array of UTF-8 JSON bytes. Required fields:</p>
 <table>
 <thead>
 <tr>
-<th>Class</th>
-<th>Holds</th>
-<th><code>compute</code> cost</th>
-<th>Use when</th>
+<th>Field</th>
+<th>Meaning</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>Resampler</code></td>
-<td>the materialised <span class="arithmatex">\(\mathbf{T}\)</span></td>
-<td>builds the full series</td>
-<td>you want the refined <strong>grid</strong> itself</td>
+<td><code>format</code></td>
+<td>The string <code>"geohalo"</code></td>
 </tr>
 <tr>
-<td><code>FactoredResampler</code></td>
-<td>just <span class="arithmatex">\(\mathbf{B}, \mathbf{A}, \mathbf{P}\)</span></td>
-<td>only the three base ops</td>
-<td>you only want per-polygon values (the reduce path)</td>
+<td><code>version</code></td>
+<td>Integer NPZ schema version, currently <code>1</code></td>
+</tr>
+<tr>
+<td><code>kind</code></td>
+<td><code>Stencil</code>, <code>ReduceOperator</code>, <code>Resampler</code>, <code>RestrictedOperator</code>, or <code>BiasTree</code></td>
+</tr>
+<tr>
+<td><code>geohalo_version</code></td>
+<td>Writer's package version; informational, not a compatibility gate</td>
+</tr>
+<tr>
+<td><code>keys</code></td>
+<td>Typed index metadata for every object except <code>Resampler</code></td>
 </tr>
 </tbody>
 </table>
-<p><code>Resampler</code> is what <a href="../../guides/resampling/"><code>resample_grid</code></a> returns.
-<code>FactoredResampler</code> is the key to the <a href="../reduce-operator/">fused reduce operator</a>: its
-<code>fuse_left(W)</code> computes <span class="arithmatex">\(\mathbf{W}\mathbf{T}\)</span> without ever materialising
-<span class="arithmatex">\(\mathbf{T}\)</span>, so refining to a multi-million-cell grid stays cheap.</p>
-<h2 id="using-it">Using it<a class="headerlink" href="#using-it" title="Permanent link">&para;</a></h2>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">geohalo</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ghl</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">fine</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">resample_grid</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">target_resolution</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">iterations</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
-</span></code></pre></div>
-<p>Or, through <code>reduce</code>, when the refinement is only a stepping stone to per-polygon values:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">out</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">reduce</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="n">geoms</span><span class="p">,</span> <span class="n">target_resolution</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">resample_iterations</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
-</span></code></pre></div>
-<p>In the second form geohalo never builds the fine field at all — it fuses the resample
-into the stencil. That is the subject of the <a href="../reduce-operator/">next page</a>.</p>
+<p><code>digest</code> is a one-dimensional uint8 array holding the object's digest bytes.
+Builder-produced digests are SHA-256 (32 bytes). Each CSR matrix named <code>prefix</code>
+uses <code>prefix_data</code>, <code>prefix_indices</code>, <code>prefix_indptr</code>, and <code>prefix_shape</code>.
+<code>shape</code> is a two-element int64 array; coefficient and index buffers retain their
+original dtypes. CSR indices are zero-based.</p>
+<h3 id="object-specific-members">Object-specific members<a class="headerlink" href="#object-specific-members" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Array members beyond <code>metadata</code> and <code>digest</code></th>
+<th>Extra JSON fields</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Stencil</td>
+<td><code>matrix_*</code>, <code>row_sums</code>, <code>lats</code>, <code>lons</code></td>
+<td><code>spherical_correction</code></td>
+</tr>
+<tr>
+<td>ReduceOperator</td>
+<td><code>matrix_*</code>, <code>row_sums</code>, <code>source_lat</code>, <code>source_lon</code></td>
+<td><code>iterations</code></td>
+</tr>
+<tr>
+<td>RestrictedOperator</td>
+<td><code>matrix_*</code>, <code>row_sums</code>, <code>source_lat</code>, <code>source_lon</code>, <code>windows</code>, <code>gather_0</code> … <code>gather_N</code>, <code>lat_chunks</code>, <code>lon_chunks</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>BiasTree</td>
+<td><code>matrix_*</code></td>
+<td><code>how</code></td>
+</tr>
+<tr>
+<td>Mean-preserving Resampler</td>
+<td><code>matrix_*</code>, <code>source_lat</code>, <code>source_lon</code>, <code>target_lat</code>, <code>target_lon</code></td>
+<td><code>method="meanpreserving"</code>, <code>normalization="destination"</code></td>
+</tr>
+<tr>
+<td>Conservative Resampler</td>
+<td><code>latitude_*</code>, <code>longitude_*</code>, <code>source_lat</code>, <code>source_lon</code>, <code>target_lat</code>, <code>target_lon</code></td>
+<td><code>method="conservative"</code>, <code>normalization</code></td>
+</tr>
+</tbody>
+</table>
+<p>Restricted <code>windows</code> is an <code>(n_windows, 4)</code> int64 array with rows
+<code>[latitude_start, latitude_stop, longitude_start, longitude_stop]</code>. Bounds are
+half-open, with unit steps, in stored source order. <code>gather_i</code> is a 1-D integer
+array of C-order positions within window <code>i</code>; concatenating the gathered arrays
+defines compact matrix column order. No windows means shape <code>(0, 4)</code> and no
+<code>gather_i</code> members. Chunk arrays list consecutive positive sizes along each axis.</p>
+<p>Key metadata is tagged JSON. Flat indexes have <code>kind</code>, a tagged <code>name</code>, tagged
+<code>values</code>, and a dtype descriptor. Specialized kinds are <code>range</code>, <code>categorical</code>,
+<code>multi</code>, <code>datetime</code>, <code>timedelta</code>, <code>period</code>, and <code>interval</code>; MultiIndex stores
+recursively encoded <code>levels</code>, integer <code>codes</code>, tagged <code>names</code>, and <code>sortorder</code>.
+For example, a tuple label <code>("zone", 7)</code> is
+<code>["tuple", [["str", "zone"], ["int", "7"]]]</code>, not a string representation to
+evaluate. The allowlisted codec is defined in <code>geohalo._index_codec</code>.</p>
+<p>The schema version is separate from geohalo's release version and from legacy
+cache payload versions. Readers reject unknown schema versions rather than
+guessing. Future incompatible format changes require a new schema version;
+support for older schemas must be explicit. This is not a promise that future
+versions of every dependency will retain every pandas dtype or timezone name.</p>
+<h2 id="validation-and-trust">Validation and trust<a class="headerlink" href="#validation-and-trust" title="Permanent link">&para;</a></h2>
+<p>Loading always disables pickle. The reader checks object kind/version, required
+arrays and dtypes, CSR bounds and monotonic pointers, matrix/grid/key dimensions,
+normalizer lengths, and restricted chunk/window/gather bounds before use.
+Unexpected or duplicate archive members are rejected. Invalid NPZ cache hits
+raise errors; <code>force_recompute=True</code> explicitly replaces them.</p>
+<p>This prevents the executable-object loading inherent in pickle. It does <strong>not</strong>
+authenticate a writer, verify geometric correctness, or impose an archive size
+limit. A validly shaped matrix can still contain wrong coefficients, and a large
+or compressed archive can exhaust memory. Authenticate shared artifacts, limit
+input sizes/resources, and maintain dependency security updates. Use an external
+checksum or signature if you need integrity/provenance checks. The embedded
+input digest is not a checksum of the archive contents.</p>
+<h2 id="migrating-existing-caches">Migrating existing caches<a class="headerlink" href="#migrating-existing-caches" title="Permanent link">&para;</a></h2>
+<p>LocalCache now reads/writes <code>path/&lt;namespace&gt;/&lt;key&gt;.npz</code>. RedisCache uses
+<code>geohalo:&lt;namespace&gt;:npz:v1:&lt;key&gt;</code>. Existing <code>.pkl</code> files and old Redis prefixes
+are neither read nor deleted. The first request rebuilds each operator once and
+writes NPZ; old and new deployments can coexist without reading each other's
+formats. Input digests themselves are unchanged.</p>
+<p>There is no automatic legacy loader or migration fallback. For externally
+managed artifacts, export <code>to_npz()</code> from an already available object using this
+version, or rebuild from inputs. Remove obsolete cache entries yourself after
+confirming older deployments no longer need them.</p>
 
 
 

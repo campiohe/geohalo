@@ -338,6 +338,8 @@
       
         
       
+        
+      
     
     
     
@@ -645,6 +647,34 @@
     
   
     Hierarchical rollups
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/serialization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portable operator artifacts
   
 
     
@@ -2156,6 +2186,11 @@ area; by default contributing NaNs propagate. Unmapped cells return NaN.</p>
 
 </div><hr />
 <h2 id="precomputed-operators">Precomputed operators<a class="headerlink" href="#precomputed-operators" title="Permanent link">&para;</a></h2>
+<p>All five classes support <code>obj.to_npz() -&gt; bytes</code> and
+<code>Class.from_npz(blob: bytes) -&gt; Class</code>. These versioned, non-pickle artifacts can
+be stored independently of the built-in caches. See
+<a href="../concepts/serialization/">portable operator artifacts</a> for supported keys,
+the array schema, validation, and migration from older caches.</p>
 
 
 <div class="doc doc-object doc-class">
@@ -2174,6 +2209,8 @@ area; by default contributing NaNs propagate. Unmapped cells return NaN.</p>
 
 
     <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="geohalo._serialization.NPZSerializable">NPZSerializable</span></code></p>
 
 
 
@@ -2256,6 +2293,8 @@ float64; dtype is part of the canonical digest, with old float64 keys intact.</p
 
 
     <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="geohalo._serialization.NPZSerializable">NPZSerializable</span></code></p>
 
 
 
@@ -2376,6 +2415,8 @@ Request float32 explicitly even if the stencil already uses float32.
 
 
     <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="geohalo._serialization.NPZSerializable">NPZSerializable</span></code></p>
 
 
 
@@ -2560,6 +2601,8 @@ explicit chunk sizes instead. Dask and Zarr are not required dependencies.</p>
 
 
     <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="geohalo._serialization.NPZSerializable">NPZSerializable</span></code></p>
 
 
 
@@ -2720,6 +2763,8 @@ changed by this grid-resampling option.</p>
 
 
     <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="geohalo._serialization.NPZSerializable">NPZSerializable</span></code></p>
 
 
 
@@ -2771,7 +2816,7 @@ changed by this grid-resampling option.</p>
 
 
 
-        <p>Pickle files under <code>path/&lt;namespace&gt;/&lt;key&gt;.pkl</code>.</p>
+        <p>NPZ files under <code>path/&lt;namespace&gt;/&lt;key&gt;.npz</code>; legacy entries are ignored.</p>
 
 
 
