@@ -1197,7 +1197,7 @@ exactly; iterations only change smoothness.
 <ul>
 <li><span class="arithmatex">\(\mathbf{B}\)</span> — <strong>bilinear interpolation</strong>, target ← source. Separable as
   <span class="arithmatex">\(\mathbf{B} = \mathbf{B}_\text{lat} \otimes \mathbf{B}_\text{lon}\)</span>, each 1-D factor
-  mapping source centres to target centres with clamped edges
+  mapping source centres to target centres with clamped edges by default
   (<code>bilinear_matrix_1d</code>).</li>
 <li><span class="arithmatex">\(\pi\)</span> — a <strong>nearest-cell assignment</strong> of each target cell to its parent source cell
   (<code>nearest_index</code>). From it:<ul>
@@ -1208,6 +1208,11 @@ exactly; iterations only change smoothness.
 </ul>
 </li>
 </ul>
+<p>With <code>period=360</code>, both the longitude factor of <span class="arithmatex">\(\mathbf{B}\)</span> and longitude
+parent assignment wrap at the seam. Latitude remains clamped, and the same
+mean-preservation proof applies to these cyclic parents. See
+<a href="../../guides/resampling/#periodic-longitude">periodic longitude</a> for source
+validation, full-cycle target generation, and polygon-coordinate limitations.</p>
 <p>The refinement is an <strong>interpolate-and-correct</strong> loop, linear in the source values
 <span class="arithmatex">\(\mathbf{x}\)</span>:</p>
 <div class="arithmatex">\[

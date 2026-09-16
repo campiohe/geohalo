@@ -1122,7 +1122,7 @@ The cache is what makes "once" stick across processes, machines, and repeated ru
 </tr>
 <tr>
 <td><code>Resampler</code></td>
-<td>source/target coords + iterations</td>
+<td>source/target coords + iterations + period</td>
 <td><code>get_or_compute_resampler</code></td>
 </tr>
 <tr>
@@ -1132,7 +1132,7 @@ The cache is what makes "once" stick across processes, machines, and repeated ru
 </tr>
 <tr>
 <td><code>ReduceOperator</code></td>
-<td>stencil digest + source coords + iterations + dtype</td>
+<td>stencil digest + source coords + iterations + dtype + period</td>
 <td><code>get_or_compute_reduce_operator</code></td>
 </tr>
 <tr>
@@ -1175,7 +1175,7 @@ invalidation to forget.</p>
 </ul>
 <p>Geometry hashing uses vectorised WKB encoding. During stencil construction, the
 same encoded bytes are reused for extraction and hashing. The digest byte format
-is unchanged for default float64 coefficients, so existing stencil and
+is unchanged for default float64 coefficients and <code>period=None</code>, so existing stencil and
 dependent reduce-operator cache entries remain valid.</p>
 <p>Both stencil and fused-operator cache methods accept <code>dtype=np.float32</code>, matching
 their builders. Dtype aliases normalize to the same native float32/float64 type
@@ -1183,6 +1183,13 @@ before hashing; different coefficient dtypes use different cache entries.
 Restricted plans inherit that distinction through the fused operator digest.
 No payload-version change is needed: coefficient arrays already carry their dtype.
 The apply-time <code>preserve_dtype=True</code> flag does not affect cache keys.</p>
+<p>Resampler and fused-operator cache methods accept <code>period=360</code> for
+<a href="../resampling/#periodic-longitude">cyclic longitude sampling</a>. Periodic and
+nonperiodic builds use distinct keys, as do different periods; <code>360</code>, <code>360.0</code>,
+and equivalent NumPy scalar values share a key. Restricted plans inherit the
+period through the fused operator digest. Existing <code>period=None</code> keys and
+payload formats are unchanged. The built matrices already encode the period,
+so no additional apply-time argument or cache metadata is needed.</p>
 <p><code>Stencil</code>, <code>ReduceOperator</code>, and <code>RestrictedOperator</code> payloads store canonical
 row order. Their cache methods return <strong>caller-ordered</strong> objects: stencil rows
 follow <code>geoms.index</code>, fused rows follow <code>stencil.keys</code>, and restricted rows follow

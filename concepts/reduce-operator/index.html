@@ -1226,6 +1226,12 @@ matrix directly on the source grid:</p>
 <p>Matrix rows, <code>row_sums</code>, and output values follow <code>stencil.keys</code>, which preserves
 the caller's polygon order. Cache hits return that same requested order even
 when another caller populated the entry in a different order.</p>
+<p>For a global source, pass <code>period=360</code> to <code>ReduceOperator.compute</code> or
+<code>cache.get_or_compute_reduce_operator</code>. Fusion uses cyclic longitude interpolation
+and parent assignment; applying the resulting operator needs no extra flag.
+Restricted plans inherit its seam-crossing halo and cache identity. The stencil
+grid and polygons themselves are unchanged; see
+<a href="../../guides/resampling/#periodic-longitude">periodic longitude</a>.</p>
 <h3 id="coefficient-and-result-dtypes">Coefficient and result dtypes<a class="headerlink" href="#coefficient-and-result-dtypes" title="Permanent link">&para;</a></h3>
 <p>Storage precision and result dtype are independent, opt-in choices:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
