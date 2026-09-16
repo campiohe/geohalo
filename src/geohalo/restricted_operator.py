@@ -11,6 +11,7 @@ import pandas as pd
 import scipy.sparse as sp
 import xarray as xr
 
+from geohalo._serialization import NPZSerializable
 from geohalo._sparse import project_values, projection_dtype
 from geohalo.geometry import ensure_ascending_lats, grid_digest, same_grid
 from geohalo.reduce_operator import ReduceOperator
@@ -112,7 +113,7 @@ def _chunk_rectangles(touched: np.ndarray) -> tuple[list[list[int]], np.ndarray]
 
 
 @dataclass(frozen=True)
-class RestrictedOperator:
+class RestrictedOperator(NPZSerializable):
     """Reusable chunk-aligned read plan for a :class:`ReduceOperator`.
 
     Latitude coordinates and windows are in *stored* order, not canonical order.

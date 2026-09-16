@@ -35,4 +35,4 @@ def test_bench_cache_miss_then_hit(tmp_path) -> None:
     )
     assert metrics["obj"].digest == cache.get_or_compute_stencil(lats, lons, geoms).digest
     assert metrics["speedup"] > 0
-    assert any(tmp_path.rglob("*.pkl"))
+    assert any(tmp_path.rglob("*.npz"))

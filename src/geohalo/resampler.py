@@ -15,6 +15,7 @@ from geohalo._conservative import (
     canonical_bounds,
     validate_method,
 )
+from geohalo._serialization import NPZSerializable
 from geohalo._sparse import GridMatrix
 from geohalo.geometry import (
     _validate_period,
@@ -26,7 +27,7 @@ from geohalo.geometry import (
 
 
 @dataclass(frozen=True)
-class Resampler:
+class Resampler(NPZSerializable):
     """Grid transform whose source columns use ascending latitude, then longitude.
 
     Target rows retain the supplied coordinate order. Direct matrix callers must

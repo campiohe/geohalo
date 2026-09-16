@@ -14,6 +14,7 @@ from exactextract.feature import Feature, FeatureSource
 from exactextract.raster import NumPyRasterSource
 from numpy.typing import DTypeLike
 
+from geohalo._serialization import NPZSerializable
 from geohalo._sparse import cast_matrix, operator_dtype
 from geohalo.geometry import (
     _geom_digest_from_wkb,
@@ -68,7 +69,7 @@ class EmptyOverlapError(Exception):
 
 
 @dataclass(frozen=True)
-class Stencil:
+class Stencil(NPZSerializable):
     occupancy_matrix: sp.csr_matrix
     keys: pd.Index
     lats: np.ndarray
