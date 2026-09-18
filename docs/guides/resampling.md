@@ -213,6 +213,35 @@ and longitude in `source_lon` order. This corrects the convention in 1.1.0, wher
 matrices built from descending latitudes expected descending values, causing the
 xarray helpers to flip north and south.
 
+## Result dtypes
+
+Both methods compute with float64 coefficients by default, so float32 inputs
+normally produce float64 results. Set `preserve_dtype=True` to retain each real
+floating input's dtype in the result:
+
+```python
+fine = ghl.resample_grid(
+    da.astype("float32"), target_resolution=0.05,
+    method="conservative", preserve_dtype=True,
+)
+# fine.dtype is float32; computation and normalization retain their precision.
+```
+
+`resample_grid_with_matrix(source, resampler, preserve_dtype=True)` and
+`resampler.apply_grid(values, preserve_dtype=True)` accept the same option.
+For a Dataset, each spatial variable retains its own floating dtype, and
+non-spatial variables pass through unchanged. Integer, boolean, and complex
+inputs keep normal promotion; fractional averages are never cast to integers.
+
+The option controls final storage. Coefficients, accumulation, and
+normalization retain their existing precision, including valid-area means
+with conservative `skipna=True`. Results match the default computation cast
+to the input dtype; conservation and mean preservation are subject to that
+final rounding. The default remains `preserve_dtype=False`.
+
+This is an apply-time option: reuse the same cached or serialized `Resampler`
+for either output dtype.
+
 ## Application memory
 
 For large source grids, the xarray helpers apply the transform one batch slice at
@@ -221,3 +250,9 @@ casting every source slice at once while preserving the matrix's arithmetic
 precision. The dense target output still needs to fit in memory, alongside
 temporary storage for one source/target slice and cached matrix indices for
 descending latitudes. Lazy inputs are still loaded in full before application.
+
+With `preserve_dtype=True`, the result is allocated directly in the floating
+input dtype. For float32, this halves output storage relative to float64 and
+avoids constructing a full float64 result batch before casting. Per-slice or
+bounded-block work arrays retain their existing precision, so total peak
+memory is not necessarily halved.

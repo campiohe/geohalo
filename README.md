@@ -145,6 +145,12 @@ methods accept `preserve_dtype=True`; floating inputs retain their result dtype,
 while integer means remain floating-point. Normalizers stay float64, and matrix
 precision is not lowered at apply time. See [dtype controls](https://campiohe.github.io/geohalo/concepts/reduce-operator/#coefficient-and-result-dtypes).
 
+Both resampling methods also accept `preserve_dtype=True` on `resample_grid`,
+`resample_grid_with_matrix`, and `Resampler.apply_grid`. Each real floating
+input retains its result dtype without lowering computation precision; float32
+output arrays use half the storage of float64. See
+[resampling result dtypes](https://campiohe.github.io/geohalo/guides/resampling/#result-dtypes).
+
 ## Documentation
 
 Everything is covered in depth at **<https://campiohe.github.io/geohalo/>**:

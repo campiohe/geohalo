@@ -158,13 +158,22 @@ change the separate `skipna` behavior of prebuilt polygon reducers.
 
 `LocalCache.get_or_compute_resampler` and its Redis counterpart accept the same
 method, normalization, period, and bounds options. Cache hits restore the two
-axis factors without rebuilding; `skipna` is apply-time and does not change the
-key. Both methods use the [portable NPZ format](serialization.md); input digests
-are unchanged, while legacy pickle cache entries require a one-time rebuild.
+axis factors without rebuilding; `skipna` and `preserve_dtype` are apply-time
+options and do not change the key. Both methods use the
+[portable NPZ format](serialization.md); input digests are unchanged, while
+legacy pickle cache entries require a one-time rebuild.
 
-Conservative coefficients and real-valued results use float64. Work is bounded
-per batch slice, including missing-data masks and reversed/strided inputs; the
-dense output still needs to fit in memory. As before, the xarray resampling
+Conservative coefficients use float64; float32 inputs normally produce float64
+results. Set `preserve_dtype=True` on `resample_grid`,
+`resample_grid_with_matrix`, or `Resampler.apply_grid` to store each real
+floating input's result in its own dtype. Accumulation and normalization retain
+their existing precision, and integer, boolean, and complex inputs keep normal
+promotion. The result is allocated in the chosen dtype; final rounding may
+reduce conservation accuracy. See [result dtypes](../guides/resampling.md#result-dtypes).
+
+Work is bounded per batch slice, including missing-data masks and
+reversed/strided inputs; the dense output still needs to fit in memory.
+As before, the xarray resampling
 adapter eagerly loads lazy inputs before application. This is not chunk-aware
 source reading or a new Dask execution mode.
 
