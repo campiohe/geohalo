@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add opt-in `preserve_dtype=True` to `Resampler.apply_grid`,
+  `resample_grid_with_matrix`, and `resample_grid` for both resampling methods.
+  Real floating inputs retain their result dtype, independently per Dataset
+  variable. Results are allocated directly in that dtype; coefficients,
+  accumulation, and normalization retain their existing precision. Integer,
+  boolean, and complex inputs keep normal promotion. Defaults, cached
+  resamplers, and serialized operators are unchanged.
+
 ## 2.0.0 — 2026-09-16
 
 ### Migration from 1.2.0

@@ -75,6 +75,7 @@ def _apply_matrix_da(
     lat_dim: str,
     lon_dim: str,
     skipna: bool,
+    preserve_dtype: bool,
 ) -> xr.DataArray:
     """Validate the source grid and apply the resampler over the spatial dims."""
     _require_spatial_dims(da, lat_dim, lon_dim)
@@ -87,7 +88,7 @@ def _apply_matrix_da(
         )
     batch_dims = [d for d in da.dims if d not in (lat_dim, lon_dim)]
     arr = da.transpose(*batch_dims, lat_dim, lon_dim).to_numpy()
-    out_flat = resampler.apply_grid(arr, descending=descending, skipna=skipna)
+    out_flat = resampler.apply_grid(arr, descending=descending, skipna=skipna, preserve_dtype=preserve_dtype)
     out_lat, out_lon = resampler.target_lat, resampler.target_lon
     out = out_flat.reshape(*arr.shape[:-2], out_lat.size, out_lon.size)
     return xr.DataArray(
@@ -106,6 +107,7 @@ def resample_grid_with_matrix[T: xr.DataArray | xr.Dataset](
     lat_dim: str = "latitude",
     lon_dim: str = "longitude",
     skipna: bool = False,
+    preserve_dtype: bool = False,
 ) -> T:
     """Resample a matching source grid, accepting either latitude orientation.
 
@@ -113,20 +115,25 @@ def resample_grid_with_matrix[T: xr.DataArray | xr.Dataset](
     source grid. Output coordinates follow the resampler's target order.
     For conservative resamplers, ``skipna=True`` averages only valid covered
     area; by default contributing NaNs propagate. Unmapped cells return NaN.
+    ``preserve_dtype=True`` retains each real floating variable's result dtype
+    without lowering computation or normalization precision. Integer, boolean,
+    and complex inputs retain normal promotion. Applies to both methods.
     """
     if skipna and resampler.method != "conservative":
         raise ValueError("resampling skipna=True requires method='conservative'")
     if isinstance(source, xr.Dataset):
         return _map_spatial_vars(
             source,
-            lambda da: resample_grid_with_matrix(da, resampler, lat_dim=lat_dim, lon_dim=lon_dim, skipna=skipna),
+            lambda da: resample_grid_with_matrix(
+                da, resampler, lat_dim=lat_dim, lon_dim=lon_dim, skipna=skipna, preserve_dtype=preserve_dtype,
+            ),
             lat_dim,
             lon_dim,
         )
-    return _apply_matrix_da(source, resampler, lat_dim, lon_dim, skipna)
+    return _apply_matrix_da(source, resampler, lat_dim, lon_dim, skipna, preserve_dtype)
 
 
-def resample_grid[T: xr.DataArray | xr.Dataset](
+def resample_grid[T: xr.DataArray | xr.Dataset](  # noqa: PLR0913 - preserve the public keyword API
     source: T,
     target_resolution: float,
     *,
@@ -138,6 +145,7 @@ def resample_grid[T: xr.DataArray | xr.Dataset](
     normalization: Normalization = "destination",
     source_bounds: GridBounds | None = None,
     skipna: bool = False,
+    preserve_dtype: bool = False,
 ) -> T:
     """Resample at a target spacing; ``period`` makes longitude a full cycle.
 
@@ -149,6 +157,9 @@ def resample_grid[T: xr.DataArray | xr.Dataset](
     still uses source centres, not their outer cell bounds; use an explicitly
     built Resampler for matched source/target footprints. ``source_bounds`` is
     an optional pair of latitude/longitude edge arrays (conservative only).
+    ``preserve_dtype=True`` retains each real floating variable's result dtype
+    for either method, with existing computation and normalization precision.
+    Integer, boolean, and complex inputs retain normal promotion.
     """
     validate_method(method, iterations, normalization, source_bounds, None)
     if skipna and method != "conservative":
@@ -170,7 +181,9 @@ def resample_grid[T: xr.DataArray | xr.Dataset](
         src_lat, src_lon, t_lat, t_lon, iterations=iterations, period=period,
         method=method, normalization=normalization, source_bounds=source_bounds, target_bounds=target_bounds,
     )
-    return resample_grid_with_matrix(source, resampler, lat_dim=lat_dim, lon_dim=lon_dim, skipna=skipna)
+    return resample_grid_with_matrix(
+        source, resampler, lat_dim=lat_dim, lon_dim=lon_dim, skipna=skipna, preserve_dtype=preserve_dtype,
+    )
 
 
 def reduce_with_operator[T: xr.DataArray | xr.Dataset](

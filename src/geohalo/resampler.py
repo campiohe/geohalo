@@ -67,7 +67,9 @@ class Resampler(NPZSerializable):
     def _grid_matrix(self) -> GridMatrix:
         return GridMatrix(self.transform_matrix, (self.source_lat.size, self.source_lon.size))
 
-    def apply_grid(self, values: np.ndarray, *, descending: bool = False, skipna: bool = False) -> np.ndarray:
+    def apply_grid(
+        self, values: np.ndarray, *, descending: bool = False, skipna: bool = False, preserve_dtype: bool = False,
+    ) -> np.ndarray:
         """Transform (..., latitude, longitude) values into (..., n_target).
 
         ``descending=True`` interprets source rows in descending latitude order.
@@ -76,12 +78,19 @@ class Resampler(NPZSerializable):
         cells return NaN. For this method only, ``skipna=True`` renormalizes over
         valid covered area, overriding destination-area normalization; all
         missing cells return NaN. The default propagates contributing NaNs.
+
+        ``preserve_dtype=True`` returns real floating inputs in their own dtype
+        for either method. Computation and normalization retain their existing
+        precision; only result storage changes. Integer, boolean, and complex
+        inputs retain normal promotion. Defaults are unchanged.
         """
         if self.axis_weights is not None:
-            return self._conservative_grid.apply(values, descending=descending, skipna=skipna)
+            return self._conservative_grid.apply(
+                values, descending=descending, skipna=skipna, preserve_dtype=preserve_dtype,
+            )
         if skipna:
             raise ValueError("resampling skipna=True requires method='conservative'")
-        return self._grid_matrix.apply(values, descending=descending)
+        return self._grid_matrix.apply(values, descending=descending, preserve_dtype=preserve_dtype)
 
     def __repr__(self) -> str:
         storage = (

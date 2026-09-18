@@ -7,6 +7,8 @@ from typing import Literal
 import numpy as np
 import scipy.sparse as sp
 
+from geohalo._sparse import projection_dtype
+
 type GridBounds = tuple[np.ndarray, np.ndarray]
 type ResampleMethod = Literal["meanpreserving", "conservative"]
 type Normalization = Literal["destination", "covered"]
@@ -58,13 +60,16 @@ class ConservativeGrid:
             return (self.longitude @ (self.latitude @ values).T).T
         return self.latitude @ (self.longitude @ values.T).T
 
-    def apply(self, values: np.ndarray, *, descending: bool, skipna: bool) -> np.ndarray:
+    def apply(
+        self, values: np.ndarray, *, descending: bool, skipna: bool, preserve_dtype: bool = False,
+    ) -> np.ndarray:
         source_shape = self.latitude.shape[1], self.longitude.shape[1]
         if values.shape[-2:] != source_shape:
             raise ValueError(f"expected trailing source shape {source_shape}, got {values.shape}")
         batch_shape = values.shape[:-2]
         target_shape = self.latitude.shape[0], self.longitude.shape[0]
-        out = np.empty((*batch_shape, *target_shape), dtype=np.result_type(values.dtype, np.float64))
+        dtype = projection_dtype(values.dtype, np.dtype(np.float64), None, preserve_dtype=preserve_dtype)
+        out = np.empty((*batch_shape, *target_shape), dtype=dtype)
         coverage = self.coverage
         for index in np.ndindex(batch_shape):
             # Flip one slice as a view, not a contiguous copy of the whole batch.
