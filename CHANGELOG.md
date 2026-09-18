@@ -10,6 +10,12 @@
   boolean, and complex inputs keep normal promotion. Defaults, cached
   resamplers, and serialized operators are unchanged.
 
+- Speed up conservative refinement by preferring a contiguous projected result
+  when both contraction orders have equal-sized intermediates. Regrids with
+  unequal intermediates still choose the smaller one, and coarsening retains
+  its existing order. Area weights, normalization, and missing-data semantics
+  are unchanged; results may differ by floating-point roundoff.
+
 ## 2.0.0 — 2026-09-16
 
 ### Migration from 1.2.0

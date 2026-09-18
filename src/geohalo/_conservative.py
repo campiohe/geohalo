@@ -55,8 +55,15 @@ class ConservativeGrid:
         return lat[:, None] * lon[None, :]
 
     def _project(self, values: np.ndarray) -> np.ndarray:
-        # Choose the smaller intermediate; both paths use only two 1-D factors.
-        if self.latitude.shape[0] * self.longitude.shape[1] <= self.latitude.shape[1] * self.longitude.shape[0]:
+        target_lat, source_lat = self.latitude.shape
+        target_lon, source_lon = self.longitude.shape
+        latitude_first = target_lat * source_lon
+        longitude_first = source_lat * target_lon
+        # Minimize the intermediate. On ties, refining ends on latitude so the
+        # larger result is C-contiguous for output copies and normalization.
+        if latitude_first < longitude_first or (
+            latitude_first == longitude_first and target_lat * target_lon <= source_lat * source_lon
+        ):
             return (self.longitude @ (self.latitude @ values).T).T
         return self.latitude @ (self.longitude @ values.T).T
 

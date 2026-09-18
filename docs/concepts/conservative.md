@@ -29,8 +29,12 @@ y_t = \sum_s \frac{A_{t\cap s}}{A_t} x_s.
 
 The two sparse factors are stored as `resampler.axis_weights`, ordered
 `(latitude, longitude)`. Applying them takes two sparse contractions per batch
-slice, choosing the smaller intermediate. A full grid-to-grid Kronecker matrix
-is never built: for this method, `resampler.transform_matrix is None`.
+slice, choosing the smaller intermediate. When the intermediate sizes tie,
+refinement ends on the latitude contraction so the larger result is contiguous
+for output copies and normalization; coarsening retains latitude first. This
+especially helps `skipna=True` with missing data, which normalizes two projected
+arrays. A full grid-to-grid Kronecker matrix is never built: for this method,
+`resampler.transform_matrix is None`.
 Use `resampler.apply_grid(values)` or `resample_grid_with_matrix` for application.
 Mean-preserving resamplers still expose their existing CSR transform matrix.
 
@@ -172,6 +176,12 @@ reversed/strided inputs; the dense output still needs to fit in memory.
 As before, the xarray resampling
 adapter eagerly loads lazy inputs before application. This is not chunk-aware
 source reading or a new Dask execution mode.
+
+To compare the contraction order with the 2.0.0 implementation on synthetic
+global grids, run `uv run python -m benchmarks.conservative_refinement` from a
+source checkout. The benchmark checks numerical agreement and reports
+interleaved timings for refinement, coarsening, and unequal axis ratios.
+Use `--memory` to measure application allocations separately from timings.
 
 Leave `iterations=1` with `method="conservative"`; other values are rejected
 because iteration only controls the mean-preserving algorithm. `FactoredResampler`
