@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2.1.0 — 2026-09-18
+
 - Add opt-in `preserve_dtype=True` to `Resampler.apply_grid`,
   `resample_grid_with_matrix`, and `resample_grid` for both resampling methods.
   Real floating inputs retain their result dtype, independently per Dataset
