@@ -1184,8 +1184,12 @@ y_t = \sum_s \frac{A_{t\cap s}}{A_t} x_s.
 \]</div>
 <p>The two sparse factors are stored as <code>resampler.axis_weights</code>, ordered
 <code>(latitude, longitude)</code>. Applying them takes two sparse contractions per batch
-slice, choosing the smaller intermediate. A full grid-to-grid Kronecker matrix
-is never built: for this method, <code>resampler.transform_matrix is None</code>.
+slice, choosing the smaller intermediate. When the intermediate sizes tie,
+refinement ends on the latitude contraction so the larger result is contiguous
+for output copies and normalization; coarsening retains latitude first. This
+especially helps <code>skipna=True</code> with missing data, which normalizes two projected
+arrays. A full grid-to-grid Kronecker matrix is never built: for this method,
+<code>resampler.transform_matrix is None</code>.
 Use <code>resampler.apply_grid(values)</code> or <code>resample_grid_with_matrix</code> for application.
 Mean-preserving resamplers still expose their existing CSR transform matrix.</p>
 <p>For finite data and matching footprints, the default preserves
@@ -1294,6 +1298,11 @@ per batch slice, including missing-data masks and reversed/strided inputs; the
 dense output still needs to fit in memory. As before, the xarray resampling
 adapter eagerly loads lazy inputs before application. This is not chunk-aware
 source reading or a new Dask execution mode.</p>
+<p>To compare the contraction order with the 2.0.0 implementation on synthetic
+global grids, run <code>uv run python -m benchmarks.conservative_refinement</code> from a
+source checkout. The benchmark checks numerical agreement and reports
+interleaved timings for refinement, coarsening, and unequal axis ratios.
+Use <code>--memory</code> to measure application allocations separately from timings.</p>
 <p>Leave <code>iterations=1</code> with <code>method="conservative"</code>; other values are rejected
 because iteration only controls the mean-preserving algorithm. <code>FactoredResampler</code>
 and fused polygon reducers remain mean-preserving. To conservatively regrid
