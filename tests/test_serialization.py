@@ -313,6 +313,9 @@ def test_wrong_type_missing_fields_duplicate_members_and_npy(objects):
 def test_invalid_object_specific_metadata_and_shapes(objects):
     for obj, metadata, arrays in [
         (objects[0], {"spherical_correction": "yes"}, {}),
+        (objects[0], {"partial_cell_weighting": "unknown"}, {}),
+        (objects[0], {"partial_cell_weighting": None}, {}),
+        (objects[0], {"partial_cell_weighting": "exact"}, {}),  # spherical_correction=False
         (objects[0], {}, {"row_sums": np.zeros(2)}),
         (objects[2], {}, {"windows": np.array([[0, 50, 0, 1]])}),
         (objects[2], {}, {"windows": np.ones((1, 3), dtype=int)}),
@@ -451,3 +454,52 @@ def test_cache_ignores_legacy_and_checks_full_digest(cache, objects, tmp_path, m
     cache._store("reduceop", key, malicious)
     with pytest.raises(ValueError, match="NPZ payload"):
         cache.get_or_compute_reduce_operator(objects[0], operator.source_lat, operator.source_lon, **kwargs)
+
+
+def test_legacy_stencil_metadata_defaults_to_approximate(objects):
+    original = objects[0]
+    payload = _arrays(original.to_npz())
+    metadata = json.loads(payload["metadata"].tobytes())
+    del metadata["partial_cell_weighting"]
+    payload["metadata"] = np.frombuffer(json.dumps(metadata).encode(), dtype=np.uint8)
+    restored = ghl.Stencil.from_npz(_pack(payload))
+    assert restored.partial_cell_weighting == "approximate"
+    for field in fields(original):
+        _assert_equal(getattr(restored, field.name), getattr(original, field.name))
+
+
+def test_exact_weighting_roundtrip_and_separate_operator_caches(cache, objects, monkeypatch):
+    dtype = objects[0].occupancy_matrix.dtype
+    lats, lons = np.array([60., 70.]), np.array([0., 10.])
+    geoms = gpd.GeoSeries([shapely.box(-4, 58, 12, 72), shapely.box(-3, 60, 11, 68)],
+                         index=pd.Index(["z", "a"], name="zone"))
+    built = {}
+    for mode in ("approximate", "exact"):
+        stencil = cache.get_or_compute_stencil(lats, lons, geoms, partial_cell_weighting=mode, dtype=dtype)
+        operator = cache.get_or_compute_reduce_operator(stencil, lats, lons, dtype=dtype)
+        restricted = cache.get_or_compute_restricted_operator(operator, lats, 1, 1)
+        built[mode] = stencil, operator, restricted
+        restored = ghl.Stencil.from_npz(stencil.to_npz())
+        for field in fields(stencil):
+            _assert_equal(getattr(restored, field.name), getattr(stencil, field.name))
+    for approximate, exact in zip(built["approximate"], built["exact"], strict=True):
+        assert approximate.digest != exact.digest
+        assert not np.allclose(approximate.row_sums, exact.row_sums, rtol=1e-4)
+    for cls in (ghl.Stencil, ghl.ReduceOperator, ghl.RestrictedOperator):
+        monkeypatch.setattr(cls, "compute", _no_build)
+    with pytest.raises(ValueError, match="EPSG:4326"):
+        cache.get_or_compute_stencil(lats, lons, geoms.set_crs("EPSG:3857"),
+                                    partial_cell_weighting="exact", dtype=dtype)
+    for mode, (stencil, operator, restricted) in built.items():
+        cached = cache.get_or_compute_stencil(lats[::-1], lons, geoms.iloc[::-1],
+                                              partial_cell_weighting=mode, dtype=dtype)
+        assert cached.partial_cell_weighting == mode
+        assert cached.digest == stencil.digest
+        _assert_equal(cached.keys, geoms.index[::-1])
+        _assert_equal(cached.occupancy_matrix, stencil.occupancy_matrix[::-1])
+        cached_op = cache.get_or_compute_reduce_operator(cached, lats, lons, dtype=dtype)
+        cached_plan = cache.get_or_compute_restricted_operator(cached_op, lats, 1, 1)
+        for actual, original in ((cached_op, operator), (cached_plan, restricted)):
+            assert actual.digest == original.digest
+            _assert_equal(actual.matrix, original.matrix[::-1])
+            _assert_equal(actual.row_sums, original.row_sums[::-1])

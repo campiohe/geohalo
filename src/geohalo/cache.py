@@ -29,7 +29,7 @@ from geohalo.bias_tree import BiasTree, tree_digest
 from geohalo.reduce_operator import ReduceOperator, reduce_operator_digest
 from geohalo.resampler import Resampler, resampler_digest
 from geohalo.restricted_operator import ChunkSizes, RestrictedOperator, restricted_operator_digest
-from geohalo.stencil import Stencil, stencil_digest
+from geohalo.stencil import PartialCellWeighting, Stencil, stencil_digest
 
 STENCIL_PREFIX = "geohalo:stencil:npz:v1"
 RESAMPLER_PREFIX = "geohalo:resampler:npz:v1"
@@ -134,15 +134,22 @@ class _Cache:
         geoms: gpd.GeoSeries,
         *,
         spherical_correction: bool = True,
+        partial_cell_weighting: PartialCellWeighting = "approximate",
         dtype: DTypeLike = np.float64,
         force_recompute: bool = False,
     ) -> Stencil:
-        digest = stencil_digest(lats, lons, geoms, spherical_correction=spherical_correction, dtype=dtype)
+        digest = stencil_digest(
+            lats, lons, geoms, spherical_correction=spherical_correction, dtype=dtype,
+            partial_cell_weighting=partial_cell_weighting,
+        )
         return self._get_or_compute_rows(
             "stencil",
             digest,
             geoms.index,
-            lambda: Stencil.compute(lats, lons, geoms, spherical_correction=spherical_correction, dtype=dtype),
+            lambda: Stencil.compute(
+                lats, lons, geoms, spherical_correction=spherical_correction, dtype=dtype,
+                partial_cell_weighting=partial_cell_weighting,
+            ),
             _ser_stencil,
             _deser_stencil,
             force_recompute,

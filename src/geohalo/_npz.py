@@ -38,6 +38,7 @@ def encode(obj: NPZSerializable) -> bytes:  # noqa: PLR0912 - five explicit obje
         _put_matrix(arrays, "matrix", obj.occupancy_matrix)
         arrays.update(lats=obj.lats, lons=obj.lons, row_sums=obj.row_sums)
         metadata["spherical_correction"] = bool(obj.spherical_correction)
+        metadata["partial_cell_weighting"] = obj.partial_cell_weighting
     elif isinstance(obj, BiasTree):
         _put_matrix(arrays, "matrix", obj.rollup_matrix)
         metadata["how"] = obj.how
@@ -167,7 +168,10 @@ def _restore[T: NPZSerializable](reader: _Reader, metadata: dict, cls: type[T]) 
         matrix = reader.matrix("matrix", shape=(len(keys), coords["lats"].size * coords["lons"].size))
         if type(metadata["spherical_correction"]) is not bool:
             raise ValueError("spherical_correction must be boolean")
-        obj = Stencil(matrix, keys, **coords, digest=digest, spherical_correction=metadata["spherical_correction"])
+        obj = Stencil(
+            matrix, keys, **coords, digest=digest, spherical_correction=metadata["spherical_correction"],
+            partial_cell_weighting=metadata.get("partial_cell_weighting", "approximate"),
+        )
         row_sums = reader.row_sums(len(keys))
         if not np.array_equal(row_sums, obj.row_sums, equal_nan=True):
             raise ValueError("stencil row_sums do not match its coefficients")

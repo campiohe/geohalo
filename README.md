@@ -96,6 +96,13 @@ Stencil and operator matrix rows follow that same order, including cache hits.
 `how={"mean", "sum"}`, a `weight_key` naming a per-cell weight variable, and
 `spherical_correction=False` to disable the latitude-area correction.
 
+Use `partial_cell_weighting="exact"` on `reduce`, `Stencil.compute`, or
+`cache.get_or_compute_stencil` to integrate the spherical area of each polygon-cell
+intersection. The default `"approximate"` multiplies planar coverage fractions by
+whole-cell spherical areas. Exact weighting requires `spherical_correction=True`
+and adds construction work; applying a prebuilt stencil uses the same sparse
+operation. See [partial-cell weighting](https://campiohe.github.io/geohalo/concepts/latitude-correction/#exact-partial-cell-weighting).
+
 For global grids, set `period=360` on `resample_grid`, `reduce`, or the
 resampler/fused-operator builder to interpolate across the longitude seam.
 Resolution-based calls then generate one full longitude cycle; explicit target

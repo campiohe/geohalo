@@ -3,6 +3,7 @@
 import hashlib
 from collections.abc import Hashable, Iterator
 from dataclasses import dataclass, field
+from typing import Literal
 
 import geopandas as gpd
 import numpy as np
@@ -17,13 +18,25 @@ from numpy.typing import DTypeLike
 from geohalo._serialization import NPZSerializable
 from geohalo._sparse import cast_matrix, operator_dtype
 from geohalo.geometry import (
+    EARTH_RADIUS_M,
     _geom_digest_from_wkb,
+    _polygon_area_steradians,
     cell_areas,
     ensure_ascending_lats,
     geom_digest,
     grid_digest,
+    polygon_areas,
     require_regular_grid,
 )
+
+type PartialCellWeighting = Literal["approximate", "exact"]
+
+
+def _validate_partial_cell_weighting(mode: PartialCellWeighting, *, spherical_correction: bool) -> None:
+    if mode not in ("approximate", "exact"):
+        raise ValueError("partial_cell_weighting must be 'approximate' or 'exact'")
+    if mode == "exact" and not spherical_correction:
+        raise ValueError("partial_cell_weighting='exact' requires spherical_correction=True")
 
 
 class _WKBFeature(Feature):
@@ -76,9 +89,11 @@ class Stencil(NPZSerializable):
     lons: np.ndarray
     digest: bytes
     spherical_correction: bool = True
+    partial_cell_weighting: PartialCellWeighting = "approximate"
     row_sums: np.ndarray = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
+        _validate_partial_cell_weighting(self.partial_cell_weighting, spherical_correction=self.spherical_correction)
         matrix = self.occupancy_matrix
         if matrix.dtype == np.float32:
             # CSR.sum(dtype=float64) may cast only AFTER float32 accumulation.
@@ -105,6 +120,7 @@ class Stencil(NPZSerializable):
         geoms: gpd.GeoSeries,
         *,
         spherical_correction: bool = True,
+        partial_cell_weighting: PartialCellWeighting = "approximate",
         dtype: DTypeLike = np.float64,
     ) -> "Stencil":
         """Build caller-ordered rows with float64 (default) or float32 coefficients.
@@ -112,8 +128,17 @@ class Stencil(NPZSerializable):
         Geometry calculations use float64 before casting stored coefficients.
         Row sums accumulate those stored weights in float64. Coordinates remain
         float64; dtype is part of the canonical digest, with old float64 keys intact.
+
+        ``partial_cell_weighting="approximate"`` (default) multiplies planar
+        coverage fractions by whole-cell areas. ``"exact"`` integrates the
+        spherical area of each polygon-cell intersection, with straight lon/lat
+        edges as in :func:`geohalo.geometry.polygon_areas`. It requires
+        ``spherical_correction=True``. Polygon and MultiPolygon inputs follow
+        that helper's CRS, coordinate, topology, and longitude requirements.
+        The extra work occurs only during stencil construction.
         """
         dtype = operator_dtype(dtype)
+        _validate_partial_cell_weighting(partial_cell_weighting, spherical_correction=spherical_correction)
         if not isinstance(geoms, gpd.GeoSeries):
             raise TypeError(f"geoms must be a gpd.GeoSeries, got {type(geoms).__name__}")
         if len(geoms) == 0:
@@ -126,15 +151,25 @@ class Stencil(NPZSerializable):
         if geoms.isna().any():
             # exactextract's native WKB reader cannot safely handle a null geometry.
             raise ValueError("geoms contains missing geometries; expected polygons")
+        exact_geoms = None
+        if partial_cell_weighting == "exact":
+            # Validate the complete inputs before native extraction, including
+            # CRS, topology, coordinate range, and the longitude edge convention.
+            zero_area = np.flatnonzero(polygon_areas(geoms) <= 0)
+            if zero_area.size:
+                raise EmptyOverlapError(geoms.index[zero_area[0]])
+            exact_geoms = geoms.to_numpy()
         wkb = shapely.to_wkb(geoms.to_numpy())
 
         matrix = _build_occupancy_matrix(
             lats_asc, lons_arr, geoms.index, wkb, spherical_correction=spherical_correction,
+            exact_geoms=exact_geoms,
         )
         order = np.argsort([repr(k) for k in geoms.index])
         digest = _stencil_digest_from_geometry_digest(
             lats_asc, lons_arr, _geom_digest_from_wkb(geoms.index.take(order), wkb[order]),
             spherical_correction=spherical_correction, dtype=dtype,
+            partial_cell_weighting=partial_cell_weighting,
         )
         return cls(
             occupancy_matrix=cast_matrix(matrix, dtype),
@@ -143,6 +178,7 @@ class Stencil(NPZSerializable):
             lons=lons_arr,
             digest=digest,
             spherical_correction=spherical_correction,
+            partial_cell_weighting=partial_cell_weighting,
         )
 
 
@@ -153,6 +189,7 @@ def _build_occupancy_matrix(
     wkb: np.ndarray,
     *,
     spherical_correction: bool,
+    exact_geoms: np.ndarray | None = None,
 ) -> sp.csr_matrix:
     n_lat, n_lon = lats.size, lons.size
     template = np.zeros((n_lat, n_lon), dtype=np.float64)
@@ -164,7 +201,13 @@ def _build_occupancy_matrix(
     features = _WKBFeatureSource(wkb)
     df = exact_extract(src, features, ops=["cell_id", "coverage"], output="pandas", include_cols=[])
 
-    areas = cell_areas(lats, lons, spherical=spherical_correction)
+    if exact_geoms is None:
+        areas = cell_areas(lats, lons, spherical=spherical_correction)
+    else:
+        # Use the uniform footprint seen by exactextract, even for coordinates
+        # whose spacing differs slightly within require_regular_grid's tolerance.
+        lat_edges = np.linspace(ymin, ymax, n_lat + 1)
+        lon_edges = np.linspace(xmin, xmax, n_lon + 1)
     rows: list[np.ndarray] = []
     cols: list[np.ndarray] = []
     data: list[np.ndarray] = []
@@ -176,7 +219,10 @@ def _build_occupancy_matrix(
         row_top = cell_ids // n_lon
         col = cell_ids % n_lon
         row_asc = n_lat - 1 - row_top
-        weight = coverage * areas[row_asc, col]
+        if exact_geoms is None:
+            weight = coverage * areas[row_asc, col]
+        else:
+            weight = _exact_cell_weights(exact_geoms[i], row_asc, col, lat_edges, lon_edges)
         if weight.sum() <= 0:
             raise EmptyOverlapError(key)
         rows.append(np.full(cell_ids.size, i, dtype=np.int64))
@@ -189,12 +235,39 @@ def _build_occupancy_matrix(
     )
 
 
+def _exact_cell_weights(
+    geom: shapely.Geometry,
+    rows: np.ndarray,
+    cols: np.ndarray,
+    lat_edges: np.ndarray,
+    lon_edges: np.ndarray,
+) -> np.ndarray:
+    """Keep whole-cell areas and integrate clipped boundary cells on the sphere."""
+    south, north = lat_edges[rows], lat_edges[rows + 1]
+    west, east = lon_edges[cols], lon_edges[cols + 1]
+    cells = shapely.box(west, south, east, north)
+    # Coverage from exactextract can round nearly-full cells to 1. Check actual
+    # containment so tiny holes or uncovered strips still get integrated.
+    partial = ~shapely.covers(geom, cells)
+    weights = EARTH_RADIUS_M**2 * np.deg2rad(east - west) * (
+        np.sin(np.deg2rad(north)) - np.sin(np.deg2rad(south))
+    )
+    intersections = shapely.intersection(geom, cells[partial])
+    # Input geometries were validated once before extraction. Integrate GEOS
+    # intersections directly without repeating public-input validation per cell.
+    weights[partial] = EARTH_RADIUS_M**2 * np.fromiter(
+        (_polygon_area_steradians(part) for part in intersections), dtype=np.float64, count=len(intersections),
+    )
+    return weights
+
+
 def stencil_digest(
     lats: np.ndarray,
     lons: np.ndarray,
     geoms: gpd.GeoSeries,
     *,
     spherical_correction: bool = True,
+    partial_cell_weighting: PartialCellWeighting = "approximate",
     dtype: DTypeLike = np.float64,
 ) -> bytes:
     """Cache key for a stencil, derivable from inputs without building it.
@@ -202,12 +275,20 @@ def stencil_digest(
     Canonicalises latitudes to ascending so a grid and its flipped twin hash
     identically; ``geom_digest`` is order-invariant, so geometry order does not
     matter either.
-    Coefficient dtype distinguishes entries; float64 retains existing keys.
+    Coefficient dtype and partial-cell weighting distinguish entries; approximate
+    float64 stencils retain existing keys.
     """
+    if partial_cell_weighting == "exact" and geoms.crs is not None and not geoms.crs.equals(
+        "EPSG:4326", ignore_axis_order=True,
+    ):
+        # Geometry digests encode WKB, not CRS; reject a projected CRS even on
+        # a cache hit for identical coordinate bytes previously labelled lon/lat.
+        raise ValueError("exact partial-cell weighting requires longitude/latitude degrees (EPSG:4326)")
     lats_asc, _ = ensure_ascending_lats(lats)
     lons_arr = np.asarray(lons, dtype=np.float64)
     return _stencil_digest_from_geometry_digest(
         lats_asc, lons_arr, geom_digest(geoms), spherical_correction=spherical_correction, dtype=dtype,
+        partial_cell_weighting=partial_cell_weighting,
     )
 
 
@@ -217,9 +298,11 @@ def _stencil_digest_from_geometry_digest(
     geometry_digest: bytes,
     *,
     spherical_correction: bool,
+    partial_cell_weighting: PartialCellWeighting = "approximate",
     dtype: DTypeLike = np.float64,
 ) -> bytes:
     """Combine canonical grid coordinates with an already-computed geometry digest."""
+    _validate_partial_cell_weighting(partial_cell_weighting, spherical_correction=spherical_correction)
     h = hashlib.sha256()
     h.update(grid_digest(lats, lons))
     h.update(b"sph" if spherical_correction else b"flat")
@@ -227,4 +310,6 @@ def _stencil_digest_from_geometry_digest(
     dtype = operator_dtype(dtype)
     if dtype != np.float64:
         h.update(b"dtype:" + dtype.name.encode())
+    if partial_cell_weighting == "exact":
+        h.update(b"partial_cell_weighting:exact")
     return h.digest()

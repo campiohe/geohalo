@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add opt-in `partial_cell_weighting="exact"` to `Stencil.compute`, `reduce`,
+  and LocalCache/RedisCache stencil builders. Boundary cells use spherical
+  polygon-cell intersection areas with straight lon/lat edges, including holes
+  and multipart polygons. Requires `spherical_correction=True`. The default
+  `"approximate"` weights, results, and cache keys remain unchanged. NPZ artifacts
+  retain the option; older stencils load as approximate. Fused and restricted
+  reductions inherit the chosen weights and distinct cache identities.
+
 ## 2.0.0 — 2026-09-16
 
 ### Migration from 1.2.0

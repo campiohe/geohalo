@@ -98,9 +98,10 @@ def polygon_areas(geoms: gpd.GeoSeries | Sequence[shapely.Geometry | None] | np.
     TypeError. A GeoSeries CRS, when set, must be EPSG:4326 (or equivalent).
     No reprojection, repair, clipping, or longitude unwrapping is performed.
 
-    Stencil weights use planar cell-coverage fractions times spherical cell
-    areas. They share these units and radius, but only approximate this area
-    in partially covered cells. For planar areas, use Shapely's ``area``.
+    Default stencil weights use planar cell-coverage fractions times spherical
+    cell areas, approximating this area in partially covered cells. Stencils
+    with ``partial_cell_weighting="exact"`` integrate their intersections with
+    this same model. For planar areas, use Shapely's ``area``.
     """
     if isinstance(geoms, gpd.GeoSeries):
         if geoms.crs is not None and not geoms.crs.equals("EPSG:4326", ignore_axis_order=True):

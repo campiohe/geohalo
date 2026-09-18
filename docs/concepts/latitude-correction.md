@@ -26,7 +26,7 @@ say.
 
 ## The fix
 
-geohalo multiplies each cell's coverage fraction by its true spherical area before
+By default, geohalo multiplies each cell's coverage fraction by its true spherical area before
 row-normalising. The area of the cell between latitude edges \(\varphi_\text{bot}\) and
 \(\varphi_\text{top}\) and spanning \(\Delta\lambda\) in longitude is the exact integral
 of the sphere's surface element:
@@ -53,6 +53,51 @@ return area_per_lat[:, None] * dlon_rad[None, :]
 
 Each stencil weight is then `coverage × area`, so a half-covered equatorial cell
 correctly outweighs a half-covered polar cell.
+
+## Exact partial-cell weighting
+
+The default `partial_cell_weighting="approximate"` treats the spherical area
+within a cell as proportional to its planar overlap fraction. Latitude changes
+the spherical surface element even within a cell, so a northern half and a
+southern half generally have different areas.
+
+Opt into integrating the actual polygon-cell intersection:
+
+```python
+out = ghl.reduce(da, geoms, partial_cell_weighting="exact")
+
+# For repeated application, prebuild or cache the same weights:
+stencil = ghl.Stencil.compute(lats, lons, geoms, partial_cell_weighting="exact")
+stencil = cache.get_or_compute_stencil(lats, lons, geoms, partial_cell_weighting="exact")
+out = ghl.reduce_with_stencil(da, stencil)
+```
+
+Exact weighting requires `spherical_correction=True`. Combining it with
+`spherical_correction=False` raises `ValueError`; pure planar coverage fractions
+already use the planar area model. The option belongs to stencil construction:
+`ReduceOperator` and `RestrictedOperator` inherit the stencil's weights.
+
+“Exact” refers to analytic integration on geohalo's sphere, up to floating-point
+precision. Edges remain straight in longitude/latitude coordinates, as in
+`polygon_areas` below. Polygon and MultiPolygon inputs must be valid, use finite
+lon/lat coordinates with latitude in [-90, 90], and declare EPSG:4326 or an
+equivalent CRS if labelled.
+Longitude is not wrapped. Cell intersections include only the polygon portion
+inside the raster footprint.
+
+This can improve area-weighted sums and means where a polygon crosses cells with
+different values. A mean over a polygon contained in a single constant-valued cell
+remains that cell's value. For scale, the default weight for the northern half of
+a 2° cell centred at 70°N overestimates its spherical area by about 2.46%; for a
+0.25° cell the difference is about 0.30%. These are individual weight errors,
+not bounds on the error in a polygon mean.
+
+The additional validation, containment checks, clipping, and area integration
+happen during construction. Application uses the same sparse multiplication.
+The default remains approximate to preserve existing results and construction
+cost. Benchmark your polygons with
+`uv run python -m benchmarks.partial_cell_weighting`; complexity and the number
+of boundary cells affect the extra cost. Both modes have distinct cache keys.
 
 ## Turning it off
 
@@ -140,13 +185,17 @@ area in coordinate units, use `shapely.area` instead.
 ### Comparing with stencil weights
 
 `polygon_areas(geoms)` and a spherical stencil's `row_sums` are expressed in the
-same m² and use the same radius, but they need not be numerically identical.
-Stencil weights multiply **planar coverage fractions** by whole-cell spherical
-areas. That approximates the spherical area of partially covered cells. A polygon
+same m² and use the same radius. Default stencil weights multiply **planar coverage
+fractions** by whole-cell spherical areas. That approximates the spherical area of
+partially covered cells. A polygon
 made entirely of whole grid cells agrees with their summed areas; a partial-cell
 boundary generally does not, even if the polygon is a lat/lon rectangle.
 
-The stencil also only includes the portion inside its grid footprint. Ratios
-against `polygon_areas` are therefore approximate coverage diagnostics, not an
-exact coverage fraction guaranteed to lie in [0, 1]. This helper leaves existing
-stencil construction and reduction results unchanged.
+With `partial_cell_weighting="exact"`, `row_sums` agrees with `polygon_areas` of
+the polygon clipped to the grid footprint, within floating-point precision
+(and any coefficient rounding when using `dtype=np.float32`). For polygons
+entirely inside that footprint, it agrees with their full spherical areas.
+
+The stencil only includes the portion inside its grid footprint. With default
+approximate weighting, ratios against `polygon_areas` remain approximate
+coverage diagnostics and are not guaranteed to lie in [0, 1].

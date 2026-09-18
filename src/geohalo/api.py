@@ -22,7 +22,7 @@ from geohalo.geometry import (
 from geohalo.reduce_operator import ReduceOperator
 from geohalo.resampler import FactoredResampler, Resampler
 from geohalo.restricted_operator import RestrictedOperator, _grid_chunks
-from geohalo.stencil import Stencil
+from geohalo.stencil import PartialCellWeighting, Stencil
 
 _RESTRICTED_BATCH_BYTES = 8 * 1024 * 1024
 
@@ -509,6 +509,7 @@ def reduce[T: xr.DataArray | xr.Dataset](  # noqa: PLR0913 - preserve the public
     target_resolution: float | None = None,
     resample_iterations: int = 1,
     spherical_correction: bool = True,
+    partial_cell_weighting: PartialCellWeighting = "approximate",
     lat_dim: str = "latitude",
     lon_dim: str = "longitude",
     geom_dim: str = "geom",
@@ -524,14 +525,22 @@ def reduce[T: xr.DataArray | xr.Dataset](  # noqa: PLR0913 - preserve the public
     or operator with ``dtype=np.float32`` and use its corresponding reducer.
     ``period=360`` enables cyclic longitude resampling and generates a full
     cycle when ``target_resolution`` is set. Geometries themselves do not wrap.
+    ``partial_cell_weighting="exact"`` opts into spherical polygon-cell
+    intersection areas; see :meth:`Stencil.compute`. The default is approximate.
     """
     src_lat = grid[lat_dim].to_numpy()
     src_lon = grid[lon_dim].to_numpy()
     if target_resolution is None:
-        stencil = Stencil.compute(src_lat, src_lon, geoms, spherical_correction=spherical_correction)
+        stencil = Stencil.compute(
+            src_lat, src_lon, geoms, spherical_correction=spherical_correction,
+            partial_cell_weighting=partial_cell_weighting,
+        )
     else:
         tlat, tlon = target_coords_from_resolution(src_lat, src_lon, target_resolution, period=period)
-        stencil = Stencil.compute(tlat, tlon, geoms, spherical_correction=spherical_correction)
+        stencil = Stencil.compute(
+            tlat, tlon, geoms, spherical_correction=spherical_correction,
+            partial_cell_weighting=partial_cell_weighting,
+        )
     return reduce_with_stencil(
         grid, stencil, resample_iterations=resample_iterations,
         lat_dim=lat_dim, lon_dim=lon_dim, geom_dim=geom_dim,

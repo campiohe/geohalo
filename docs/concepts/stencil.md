@@ -6,7 +6,8 @@ matrix and just enough metadata to apply and validate it.
 
 ## How it is built
 
-`Stencil.compute(lats, lons, geoms)` runs a fixed pipeline:
+`Stencil.compute(lats, lons, geoms)` uses approximate partial-cell weighting by
+default, with this pipeline:
 
 ```mermaid
 flowchart TD
@@ -39,7 +40,10 @@ flowchart TD
 
 4. **Weight by area.** Each coverage fraction is multiplied by the cell's true
    spherical area, so a half-covered equatorial cell outweighs a half-covered polar
-   one. See [latitude correction](latitude-correction.md).
+   one. With `partial_cell_weighting="exact"`, geohalo instead clips boundary
+   cells to the polygon and integrates their spherical areas; fully covered cells
+   retain whole-cell areas. See
+   [exact partial-cell weighting](latitude-correction.md#exact-partial-cell-weighting).
 
 5. **Assemble CSR.** The `(polygon, cell, weight)` triples become a
    `scipy.sparse.csr_matrix` — the `occupancy_matrix`, in caller row order.
@@ -123,6 +127,30 @@ their vertex count, since `exactextract` clips every polygon against the raster.
 resulting CSR matrix, by contrast, is tiny (kilobytes to a few megabytes) and is what
 you [cache](../guides/caching.md). See the
 [`Stencil.compute` rows](../performance.md) in the benchmarks.
+
+Exact partial-cell weighting adds input validation, cell containment checks, and
+intersection/integration work at construction time. It uses the same sparse
+application path afterward. Compare build and application times, and area error,
+on synthetic high-latitude polygons:
+
+```bash
+uv run python -m benchmarks.partial_cell_weighting
+```
+
+An illustrative local run with 250 polygons between 45°N and 75°N gave these
+median build times over three runs. The last column compares default row sums
+with the zones' spherical areas; exact weighting agreed within `2e-14` relative
+error in both cases.
+
+| Grid spacing | Vertices per polygon | Approximate build | Exact build | Max approximate area error |
+| --- | --- | --- | --- | --- |
+| 0.25° | 129 | 0.080 s | 1.83 s | 0.053% |
+| 2° | 513 | 0.055 s | 0.402 s | 3.98% |
+
+Applying 25 slices took about 3 ms for either fine-grid stencil and 0.10 ms
+for either coarse-grid stencil. These are workload-dependent examples, not
+performance guarantees. Reproduce the second case with
+`--resolution 2 --quad-segs 128`.
 
 Detailed boundaries benefit especially from the WKB input path. Reproduce the
 comparison against the previous GeoJSON implementation without downloading data:

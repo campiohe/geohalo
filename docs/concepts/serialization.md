@@ -124,12 +124,17 @@ original dtypes. CSR indices are zero-based.
 
 | Kind | Array members beyond `metadata` and `digest` | Extra JSON fields |
 | --- | --- | --- |
-| Stencil | `matrix_*`, `row_sums`, `lats`, `lons` | `spherical_correction` |
+| Stencil | `matrix_*`, `row_sums`, `lats`, `lons` | `spherical_correction`, `partial_cell_weighting` |
 | ReduceOperator | `matrix_*`, `row_sums`, `source_lat`, `source_lon` | `iterations` |
 | RestrictedOperator | `matrix_*`, `row_sums`, `source_lat`, `source_lon`, `windows`, `gather_0` … `gather_N`, `lat_chunks`, `lon_chunks` | — |
 | BiasTree | `matrix_*` | `how` |
 | Mean-preserving Resampler | `matrix_*`, `source_lat`, `source_lon`, `target_lat`, `target_lon` | `method="meanpreserving"`, `normalization="destination"` |
 | Conservative Resampler | `latitude_*`, `longitude_*`, `source_lat`, `source_lon`, `target_lat`, `target_lon` | `method="conservative"`, `normalization` |
+
+Stencil `partial_cell_weighting` is `"approximate"` or `"exact"`. Older version-1
+archives without this field load as `"approximate"`. Exact weighting requires
+`spherical_correction=true`. Matrices and their stored normalizers remain the
+application data; loading never reconstructs polygon intersections.
 
 Restricted `windows` is an `(n_windows, 4)` int64 array with rows
 `[latitude_start, latitude_stop, longitude_start, longitude_stop]`. Bounds are

@@ -9,7 +9,7 @@ These precomputed objects depend only on their inputs, not on grid values:
 
 | Object           | Depends on                                       | Built by                       |
 | ---------------- | ------------------------------------------------ | ------------------------------ |
-| `Stencil`        | grid coords + spherical flag + polygons + dtype  | `get_or_compute_stencil`       |
+| `Stencil`        | grid coords + spherical flag + partial-cell weighting + polygons + dtype | `get_or_compute_stencil` |
 | `Resampler`      | source/target coords + method + iterations + period + normalization + optional bounds | `get_or_compute_resampler` |
 | `BiasTree`       | edges + weights + how                            | `get_or_compute_tree`          |
 | `ReduceOperator` | stencil digest + source coords + iterations + dtype + period | `get_or_compute_reduce_operator` |
@@ -86,6 +86,12 @@ Both resampler representations use NPZ schema version 1, distinguished by the
 `method` metadata field. Conservative payloads hold two sparse axis matrices
 and normalization, with no Kronecker matrix. Mean-preserving payloads hold the
 full CSR transform. Default input digests are unchanged.
+
+`partial_cell_weighting="exact"` adds a stencil digest tag. The default
+`"approximate"` keeps existing keys. Fused and restricted operators inherit this
+distinction through their input digests. Pass the option directly to
+`cache.get_or_compute_stencil`; cache hits preserve the mode without recomputing
+intersections. Older NPZ stencil metadata without the option loads as approximate.
 
 `Stencil`, `ReduceOperator`, and `RestrictedOperator` payloads store canonical
 row order. Their cache methods return **caller-ordered** objects: stencil rows
