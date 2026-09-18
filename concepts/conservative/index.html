@@ -1290,12 +1290,20 @@ change the separate <code>skipna</code> behavior of prebuilt polygon reducers.</
 <h2 id="reuse-memory-and-scope">Reuse, memory, and scope<a class="headerlink" href="#reuse-memory-and-scope" title="Permanent link">&para;</a></h2>
 <p><code>LocalCache.get_or_compute_resampler</code> and its Redis counterpart accept the same
 method, normalization, period, and bounds options. Cache hits restore the two
-axis factors without rebuilding; <code>skipna</code> is apply-time and does not change the
-key. Both methods use the <a href="../serialization/">portable NPZ format</a>; input digests
-are unchanged, while legacy pickle cache entries require a one-time rebuild.</p>
-<p>Conservative coefficients and real-valued results use float64. Work is bounded
-per batch slice, including missing-data masks and reversed/strided inputs; the
-dense output still needs to fit in memory. As before, the xarray resampling
+axis factors without rebuilding; <code>skipna</code> and <code>preserve_dtype</code> are apply-time
+options and do not change the key. Both methods use the
+<a href="../serialization/">portable NPZ format</a>; input digests are unchanged, while
+legacy pickle cache entries require a one-time rebuild.</p>
+<p>Conservative coefficients use float64; float32 inputs normally produce float64
+results. Set <code>preserve_dtype=True</code> on <code>resample_grid</code>,
+<code>resample_grid_with_matrix</code>, or <code>Resampler.apply_grid</code> to store each real
+floating input's result in its own dtype. Accumulation and normalization retain
+their existing precision, and integer, boolean, and complex inputs keep normal
+promotion. The result is allocated in the chosen dtype; final rounding may
+reduce conservation accuracy. See <a href="../../guides/resampling/#result-dtypes">result dtypes</a>.</p>
+<p>Work is bounded per batch slice, including missing-data masks and
+reversed/strided inputs; the dense output still needs to fit in memory.
+As before, the xarray resampling
 adapter eagerly loads lazy inputs before application. This is not chunk-aware
 source reading or a new Dask execution mode.</p>
 <p>To compare the contraction order with the 2.0.0 implementation on synthetic

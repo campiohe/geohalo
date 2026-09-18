@@ -930,6 +930,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#result-dtypes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Result dtypes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#application-memory" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1209,6 +1220,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#result-dtypes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Result dtypes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#application-memory" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1445,6 +1467,28 @@ resampler was built.</p>
 and longitude in <code>source_lon</code> order. This corrects the convention in 1.1.0, where
 matrices built from descending latitudes expected descending values, causing the
 xarray helpers to flip north and south.</p>
+<h2 id="result-dtypes">Result dtypes<a class="headerlink" href="#result-dtypes" title="Permanent link">&para;</a></h2>
+<p>Both methods compute with float64 coefficients by default, so float32 inputs
+normally produce float64 results. Set <code>preserve_dtype=True</code> to retain each real
+floating input's dtype in the result:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">fine</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">resample_grid</span><span class="p">(</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="n">da</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">&quot;float32&quot;</span><span class="p">),</span> <span class="n">target_resolution</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    <span class="n">method</span><span class="o">=</span><span class="s2">&quot;conservative&quot;</span><span class="p">,</span> <span class="n">preserve_dtype</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="p">)</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="c1"># fine.dtype is float32; computation and normalization retain their precision.</span>
+</span></code></pre></div>
+<p><code>resample_grid_with_matrix(source, resampler, preserve_dtype=True)</code> and
+<code>resampler.apply_grid(values, preserve_dtype=True)</code> accept the same option.
+For a Dataset, each spatial variable retains its own floating dtype, and
+non-spatial variables pass through unchanged. Integer, boolean, and complex
+inputs keep normal promotion; fractional averages are never cast to integers.</p>
+<p>The option controls final storage. Coefficients, accumulation, and
+normalization retain their existing precision, including valid-area means
+with conservative <code>skipna=True</code>. Results match the default computation cast
+to the input dtype; conservation and mean preservation are subject to that
+final rounding. The default remains <code>preserve_dtype=False</code>.</p>
+<p>This is an apply-time option: reuse the same cached or serialized <code>Resampler</code>
+for either output dtype.</p>
 <h2 id="application-memory">Application memory<a class="headerlink" href="#application-memory" title="Permanent link">&para;</a></h2>
 <p>For large source grids, the xarray helpers apply the transform one batch slice at
 a time. Small contiguous grids use bounded batches. This avoids copying or
@@ -1452,6 +1496,11 @@ casting every source slice at once while preserving the matrix's arithmetic
 precision. The dense target output still needs to fit in memory, alongside
 temporary storage for one source/target slice and cached matrix indices for
 descending latitudes. Lazy inputs are still loaded in full before application.</p>
+<p>With <code>preserve_dtype=True</code>, the result is allocated directly in the floating
+input dtype. For float32, this halves output storage relative to float64 and
+avoids constructing a full float64 result batch before casting. Per-slice or
+bounded-block work arrays retain their existing precision, so total peak
+memory is not necessarily halved.</p>
 
 
 
