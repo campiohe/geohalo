@@ -2,12 +2,17 @@
 
 ## Unreleased
 
+## 2.2.0 — 2026-10-16
+
 - Add `ReduceOperator.compute_weighted`: a reduce operator whose entries are the counts of a fine lattice (for
   example population per 30 arc-second pixel) inside each polygon and source cell, from exact pixel coverage.
-  Source cell edges inside the window must be pixel edges; pixels without counts are never extracted.
+  Source cell edges inside the window must be pixel edges, to a thousandth of a pixel; pixels without counts are
+  never extracted, and the window is read in place. As with `compute`, the part of a polygon off the source grid
+  is not counted; `period=360` wraps pixel longitudes onto a 0..360 source grid.
 - Add `ReduceOperator.reweight`, scaling an operator's columns by a weight per source cell, and
   `ReduceOperator.concat`, stacking operators by rows. All three return ordinary `ReduceOperator`s; NPZ
-  artifacts, caches and existing operators are unchanged.
+  artifacts, caches and existing operators are unchanged. There is no cache helper for them; see the caching
+  guide.
 
 ## 2.1.0 — 2026-09-18
 
