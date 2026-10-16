@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import Literal
 
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
@@ -25,7 +26,16 @@ from numpy.typing import DTypeLike
 
 from geohalo._serialization import NPZSerializable
 from geohalo._sparse import GridMatrix, cast_matrix, operator_dtype, stored_row_sums
-from geohalo.geometry import _validate_period, ensure_ascending_lats, grid_digest, same_grid
+from geohalo._weighted import counts_digest, require_inside, require_nested, weight_window, weighted_matrix
+from geohalo.geometry import (
+    _validate_period,
+    ensure_ascending_lats,
+    geom_digest,
+    grid_digest,
+    midpoint_edges,
+    require_regular_grid,
+    same_grid,
+)
 from geohalo.resampler import FactoredResampler
 from geohalo.stencil import Stencil
 
@@ -146,6 +156,81 @@ class ReduceOperator(NPZSerializable):
             source_lon=src_lon,
             iterations=iterations,
             digest=digest,
+        )
+
+    @classmethod
+    def compute_weighted(
+        cls,
+        geometries: gpd.GeoSeries,
+        weight_lat: np.ndarray,
+        weight_lon: np.ndarray,
+        weights: np.ndarray,
+        source_lat: np.ndarray,
+        source_lon: np.ndarray,
+        *,
+        dtype: DTypeLike = np.float64,
+    ) -> "ReduceOperator":
+        """Weight each geometry's cells by the counts of a fine lattice that nests in the source grid.
+
+        ``matrix[i, j]`` is the sum over the pixels ``k`` of cell ``j`` of
+        ``coverage(i, k) * weights[k]``, where the coverage is the planar
+        fraction of the pixel inside the geometry (exactextract, as
+        :meth:`Stencil.compute` takes it). ``row_sums`` are the float64 sums of
+        the stored coefficients, so ``how="mean"`` answers
+        ``sum_j M_ij x_j / sum_j M_ij``.
+
+        ``weight_lat``/``weight_lon`` are the centres of a regular window of the
+        lattice, latitude in either order and longitude ascending; ``weights``
+        has shape ``(weight_lat.size, weight_lon.size)`` in that order and holds
+        counts per pixel. NaN is 0; negative or infinite counts raise
+        ValueError. ``source_lat`` may run either way and is stored ascending,
+        as in :meth:`compute`. Longitudes are not wrapped: pixels outside the
+        source grid, and the counts in them, are dropped.
+
+        Raises ValueError when a source cell edge inside the window is not a
+        pixel edge (1e-9 degrees), or when a geometry's bounds leave the window;
+        EmptyOverlapError when a geometry covers no area of the source grid
+        inside the window. A geometry whose pixels all weigh 0 has a row of
+        zeros (no stored entries), which a mean with ``skipna=True`` answers as
+        NaN.
+        """
+        dtype = operator_dtype(dtype)
+        if not isinstance(geometries, gpd.GeoSeries):
+            raise TypeError(f"geometries must be a gpd.GeoSeries, got {type(geometries).__name__}")
+        if len(geometries) == 0:
+            raise ValueError("geometries is empty; need at least one polygon")
+        if geometries.isna().any():
+            raise ValueError("geometries contains missing geometries; expected polygons")
+        if geometries.crs is not None and not geometries.crs.equals("EPSG:4326", ignore_axis_order=True):
+            raise ValueError("geometries must be in longitude/latitude degrees (EPSG:4326)")
+        window = weight_window(weight_lat, weight_lon, weights)
+        src_lat, _ = ensure_ascending_lats(source_lat)
+        src_lon = np.asarray(source_lon, dtype=np.float64)
+        require_regular_grid(src_lat, "latitude")
+        require_regular_grid(src_lon, "longitude")
+        if src_lon.size > 1 and src_lon[0] > src_lon[-1]:
+            raise ValueError("source_lon must ascend")
+        lat_edges, lon_edges = midpoint_edges(src_lat), midpoint_edges(src_lon)
+        require_nested(lat_edges, window.south, window.lat_step, window.north, "latitude")
+        require_nested(lon_edges, window.west, window.lon_step, window.east, "longitude")
+        require_inside(geometries, window, lat_edges, lon_edges)
+
+        matrix = cast_matrix(weighted_matrix(geometries, window, src_lat, src_lon), dtype)
+        matrix.eliminate_zeros()
+        h = hashlib.sha256(b"geohalo:weighted:1")
+        h.update(geom_digest(geometries))
+        h.update(grid_digest(window.lat[::-1], window.lon))
+        h.update(counts_digest(window))
+        h.update(grid_digest(src_lat, src_lon))
+        h.update(dtype.name.encode())
+        return cls(
+            matrix=matrix,
+            row_sums=stored_row_sums(matrix),
+            keys=geometries.index,
+            source_lat=src_lat,
+            source_lon=src_lon,
+            iterations=1,
+            digest=h.digest(),
         )
 
     def reweight(self, cell_weights: np.ndarray, *, descending: bool = False) -> "ReduceOperator":
