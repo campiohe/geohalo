@@ -13,6 +13,7 @@ magnitude smaller than ``T`` and its size is independent of the iteration count.
 """
 
 import hashlib
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import cached_property
 from typing import Literal
@@ -145,4 +146,43 @@ class ReduceOperator(NPZSerializable):
             source_lon=src_lon,
             iterations=iterations,
             digest=digest,
+        )
+
+    @classmethod
+    def concat(cls, operators: Sequence["ReduceOperator"]) -> "ReduceOperator":
+        """Stack operators' rows in order.
+
+        They share one source grid, coefficient dtype, iteration count and key
+        names, and no key repeats. One operator is returned as it is; otherwise
+        the digest covers the parts' digests in order.
+        """
+        operators = list(operators)
+        if not operators:
+            raise ValueError("concat needs at least one operator")
+        first = operators[0]
+        for other in operators[1:]:
+            if not same_grid(other.source_lat, other.source_lon, first.source_lat, first.source_lon):
+                raise ValueError("operators must share one source grid")
+            if other.matrix.dtype != first.matrix.dtype:
+                raise ValueError("operators must share one coefficient dtype")
+            if other.iterations != first.iterations:
+                raise ValueError("operators must share one iteration count")
+            if list(other.keys.names) != list(first.keys.names):
+                raise ValueError("operators must share key names")
+        if len(operators) == 1:
+            return first
+        keys = first.keys.append([other.keys for other in operators[1:]])
+        if keys.has_duplicates:
+            raise ValueError(f"keys repeat across operators: {list(keys[keys.duplicated()].unique()[:10])!r}")
+        h = hashlib.sha256(b"geohalo:concat:1")
+        for other in operators:
+            h.update(other.digest)
+        return cls(
+            matrix=sp.vstack([other.matrix for other in operators], format="csr"),
+            row_sums=np.concatenate([np.asarray(other.row_sums, dtype=np.float64) for other in operators]),
+            keys=keys,
+            source_lat=first.source_lat,
+            source_lon=first.source_lon,
+            iterations=first.iterations,
+            digest=h.digest(),
         )
