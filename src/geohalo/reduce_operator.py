@@ -24,7 +24,7 @@ import scipy.sparse as sp
 from numpy.typing import DTypeLike
 
 from geohalo._serialization import NPZSerializable
-from geohalo._sparse import GridMatrix, cast_matrix, operator_dtype
+from geohalo._sparse import GridMatrix, cast_matrix, operator_dtype, stored_row_sums
 from geohalo.geometry import _validate_period, ensure_ascending_lats, grid_digest, same_grid
 from geohalo.resampler import FactoredResampler
 from geohalo.stencil import Stencil
@@ -146,6 +146,49 @@ class ReduceOperator(NPZSerializable):
             source_lon=src_lon,
             iterations=iterations,
             digest=digest,
+        )
+
+    def reweight(self, cell_weights: np.ndarray, *, descending: bool = False) -> "ReduceOperator":
+        """Scale each column by its cell's weight; ``cell_weights`` has the source grid's shape.
+
+        ``descending=True`` reads its rows north to south, as :meth:`apply_grid`
+        does. NaN is 0; a negative or infinite weight on a cell the operator
+        reads raises ValueError. Entries that become 0 are dropped and
+        ``row_sums`` are recomputed in float64 from the stored coefficients.
+        Only the cells the operator reads are looked at, and the digest covers
+        exactly those weights.
+        """
+        shape = (self.source_lat.size, self.source_lon.size)
+        weights = np.asarray(cell_weights)
+        if weights.shape != shape:
+            raise ValueError(f"cell_weights must have shape {shape}, got {weights.shape}")
+        if weights.dtype.kind not in "fiu":
+            raise TypeError(f"cell_weights must be real numbers, got {weights.dtype}")
+        rows, cols = np.divmod(self.matrix.indices, shape[1])
+        if descending:
+            rows = shape[0] - 1 - rows
+        scale = weights[rows, cols].astype(np.float64)
+        scale[np.isnan(scale)] = 0.0
+        if np.isinf(scale).any() or (scale < 0).any():
+            raise ValueError("cell_weights must not be negative or infinite; NaN is read as 0")
+        scaled = (self.matrix.data.astype(np.float64) * scale).astype(self.matrix.dtype)
+        matrix = sp.csr_matrix(
+            (scaled, self.matrix.indices.copy(), self.matrix.indptr.copy()), shape=self.matrix.shape,
+        )
+        matrix.eliminate_zeros()
+        columns, first = np.unique(self.matrix.indices, return_index=True)
+        h = hashlib.sha256(b"geohalo:reweighted:1")
+        h.update(self.digest)
+        h.update(columns.astype(np.int64).tobytes())
+        h.update((scale[first] + 0.0).tobytes())
+        return type(self)(
+            matrix=matrix,
+            row_sums=stored_row_sums(matrix),
+            keys=self.keys,
+            source_lat=self.source_lat,
+            source_lon=self.source_lon,
+            iterations=self.iterations,
+            digest=h.digest(),
         )
 
     @classmethod
