@@ -79,22 +79,32 @@ Timing: hot/hit rows 2 warmup + 7 iters; miss rows 1 warmup + 3 iters (global 0.
 ## Weighted build (compute_weighted)
 
 Run: `uv run python -m benchmarks.weighted_build` (3 repeats; median).
-Environment: Python 3.14.4 on Linux x86_64 (WSL2), geohalo @ 5a44aa8, scipy 1.17.1, numpy 2.4.6, shapely 2.1.2, exactextract 0.3.0, geopandas 1.1.3, pandas 3.0.3.
-Hardware: Intel Core Ultra 7 265H (16 threads), 21 GB RAM; load average 13-17 while measured, so times are upper bounds.
-Window: 2400x4200 = 10.1M pixels at 30 arc-seconds (35-55 N, 10 W-25 E), 38 MiB float32, 4.0M inhabited. Zones: one disc of radius 9.4 degrees (3.6M inhabited pixels), or Voronoi cells tiling the window. Float32 operators on the global 0.25 and 0.05 degree grids.
+Environment: Python 3.14.4 on Linux x86_64 (WSL2), geohalo 2.2.0, scipy 1.17.1, numpy 2.4.6, shapely 2.1.2, exactextract 0.3.0, geopandas 1.1.3, pandas 3.0.3.
+Hardware: Intel Core Ultra 7 265H (16 threads), 21 GB RAM; load average about 1 while measured.
+Window: 2400x4200 = 10.1M pixels at 30 arc-seconds (35-55 N, 10 W-25 E), 38 MiB float32, 4.0M inhabited. Zones: one disc of radius 9.4 degrees (4.0M pixels, 1.6M of them inhabited), or Voronoi cells tiling the window. Float32 operators on the global 0.25 and 0.05 degree grids.
 
 | Grid | Zones | Median s | Traced peak MiB | nnz | NPZ KiB |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 0.25 | 1 | 0.29 | 124 | 4,596 | 55 |
-| 0.05 | 1 | 0.29 | 124 | 111,689 | 959 |
-| 0.25 | 200 | 0.57 | 14 | 15,106 | 140 |
-| 0.05 | 200 | 0.65 | 18 | 291,496 | 2,366 |
-| 0.25 | 3000 | 2.68 | 10 | 28,410 | 276 |
-| 0.05 | 3000 | 2.19 | 13 | 341,845 | 2,793 |
+| 0.25 | 1 | 0.24 | 99 | 4,596 | 55 |
+| 0.05 | 1 | 0.26 | 100 | 111,689 | 959 |
+| 0.25 | 200 | 0.44 | 13 | 15,106 | 140 |
+| 0.05 | 200 | 0.50 | 16 | 291,496 | 2,366 |
+| 0.25 | 3000 | 0.86 | 10 | 28,410 | 276 |
+| 0.05 | 3000 | 0.82 | 13 | 341,845 | 2,793 |
 
-Peak memory is the caller's window (4 bytes per pixel in float32, never copied when it is north to south and float32
-or float64), plus about 24 bytes per inhabited pixel covered by the 16 geometries of one exactextract call
-(`cell_id`, `coverage`, `values`), plus about 10 bytes per inhabited pixel of the largest of them for the per-zone
-temporaries (one zone over 3.6M inhabited pixels: 124 MiB), plus exactextract's own coverage grid per polygon (C++, at
-most `max_cells_in_memory` cells, not traced). It does not grow with the number of zones; a caller bounds it by
-batching zones into windows.
+Peak memory is the caller's window, read in place (4 bytes per pixel in float32; float32 and float64 windows are not
+copied in either latitude order or with any strides), plus the larger of two things that do not overlap in time:
+
+- while exactextract reads a zone, a contiguous copy of the window over the zone's bounding box, in the window's dtype
+  (exactextract's NumPy reader hands its native code a slice, which is made contiguous); for the disc, 5.1M pixels in
+  float32, 19 MiB;
+- after it, about 24 bytes per inhabited pixel covered by the 16 geometries of one exactextract call (`cell_id`,
+  `coverage`, `values`), plus about 40 bytes per inhabited pixel of the largest zone for sorting its pixels' cells
+  and summing into the cells they hit, and nothing per cell of its bounding box (the disc: 1.6M inhabited pixels,
+  37 + 64 MiB);
+
+and about 40 bytes per stored entry while the matrix is assembled and cast. exactextract's native buffers, such as a
+zone's coverage fractions over its box (at most `max_cells_in_memory` cells at a time), are not traced: for the disc
+the process's resident high-water mark rises 145 MiB against 100 MiB traced.
+
+It does not grow with the number of zones; a caller bounds it by batching zones into windows.

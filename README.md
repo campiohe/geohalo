@@ -149,6 +149,8 @@ To weight zone means by a fine lattice of counts (for example population per
 30 arc-second pixel), build the operator with
 `ghl.ReduceOperator.compute_weighted(geoms, weight_lat, weight_lon, counts, lats, lons)`:
 each entry is the count inside the zone and the cell, from exact pixel coverage.
+Pass `period=360` when the source longitudes run 0..360 and the window does not;
+without it, pixels off the source grid are not counted, as with `compute`.
 `op.reweight(cell_weights)` scales an operator's columns by a weight per cell and
 `ReduceOperator.concat` stacks operators built in batches. See
 [weighted operators](https://campiohe.github.io/geohalo/concepts/reduce-operator/#weighted-by-counts-on-a-fine-lattice).

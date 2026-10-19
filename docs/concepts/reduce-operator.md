@@ -223,12 +223,15 @@ mean = op.apply_grid(field, descending=True, how="mean", skipna=True)
 ```
 
 The window of counts is regular, its latitude in either order and its longitude
-ascending. Every source cell edge **inside** the window must be a pixel edge,
-to within 1e-9 degrees, so the pixels sum exactly into cells; a grid that does
-not nest is refused with `ValueError`, as is a geometry whose bounds leave the
-window. A geometry that covers no area of the source grid inside the window
-raises `EmptyOverlapError`. A float32 or float64 window stored north to south is
-read in place, never copied.
+ascending. Every source cell edge **inside** the window must be a pixel edge, to
+within a thousandth of a pixel, so the pixels sum exactly into cells: a pixel
+goes to the cell that holds its centre, half a pixel from either edge, and a
+float32 0.1° grid nests in a 30″ lattice as its float64 twin does. A grid that
+does not nest is refused with `ValueError`, as is a geometry whose bounds leave
+the window. A geometry that covers no area of the source grid inside the window
+raises `EmptyOverlapError`. A float32 or float64 window is read in place, never
+copied, in either latitude order and with any strides (a slice of a larger
+raster, for example); other dtypes and masked arrays are converted first.
 
 **Counts, not densities.** The coverage \(c_{ik}\) is exactextract's planar
 fraction of a pixel, never multiplied by an area: a count already carries the
@@ -242,36 +245,55 @@ for 30″ pixels, and only on partially covered pixels. Against
 - counts proportional to pixel area (a uniform density) reproduce `compute` on
   fully covered cells and on row sums;
 - on partially covered cells they differ by at most
-  \((\Delta\varphi_\text{cell}/2)\tan|\varphi|\) relative (0.23 % for 0.25° cells
+  \((\Delta\varphi_\text{cell}/2)\tan|\varphi|\) relative (0.22 % for 0.25° cells
   at 45°), which is `compute`'s own planar approximation inside a coarse cell.
 
-**Missing and empty pixels.** NaN counts are 0; negative or infinite counts raise
-`ValueError`. Pixels with a zero or NaN count never leave exactextract, so the
-Python-side cost is proportional to inhabited pixels. A geometry over pixels that
-all weigh 0 has a row of zeros (no stored entries): its mean is NaN with
-`skipna=True`. With `skipna=False` the mean divides 0 by 0.
+**Missing and empty pixels.** NaN and masked counts are 0; negative or infinite
+counts raise `ValueError`, as does a coefficient that overflows the operator's
+dtype (float32 counts summing past 3.4e38 in a cell, say). Pixels with a zero or
+NaN count never leave exactextract, so the Python-side cost is proportional to
+inhabited pixels. A geometry over pixels that all weigh 0 has a row of zeros (no
+stored entries): its mean is NaN with `skipna=True`, and with `skipna=False` it
+is 0/0, NaN with NumPy's `RuntimeWarning: invalid value encountered in divide`.
 
-**No longitude wrap.** The window and the source longitudes must be in the same
-frame. A pixel whose centre lies outside the source grid belongs to no cell and is
-dropped with its count, just as `compute` drops the part of a polygon beyond the
-grid.
+**Off the source grid, and longitude frames.** A pixel counts in the source cell
+that holds its centre. Without `period`, the window and the source longitudes are
+read in one frame, and the part of a geometry outside the source grid is not
+counted, as with `compute`: a pixel whose centre is off the grid is dropped with
+its count. That is what a regional source grid needs, but on a 0..360 grid it
+means a zone across 0° counts only its eastern part. `period=360` moves each
+pixel centre by a multiple of 360 into the source grid's frame before it is
+assigned, so a window in -180..180 reaches a 0..360 grid, and the nesting and
+overlap checks look at the grid's copies 360° apart. `period` is validated as in
+`compute` and is part of the digest; geometries are never moved, so they stay in
+the window's frame.
+
+**Build memory.** Besides the caller's window, a build holds a copy of the
+window over one zone's bounding box at a time (exactextract makes it while it
+reads the zone), or, once it has, about 24 bytes per inhabited pixel under the 16
+zones of one exactextract call and about 40 more per inhabited pixel of the
+largest zone; and about 40 bytes per stored entry. It does not grow with the
+number of zones. See the [benchmark](../benchmark.md#weighted-build-compute_weighted).
 
 ### Reweighting by cell
 
 `op.reweight(cell_weights, descending=False)` scales each column of an existing
 operator by its cell's weight (`cell_weights` has the source grid's shape;
-`descending=True` reads it north to south). NaN is 0, negative or infinite
-weights on cells the operator reads raise `ValueError`, entries that become 0 are
-dropped (so a [restricted plan](restricted-operator.md) never reads them) and
-`row_sums` are recomputed. Only the cells the operator reads are looked at, and
-the digest covers exactly those weights.
+`descending=True` reads it north to south). NaN and masked weights are 0;
+negative or infinite weights on cells the operator reads raise `ValueError`, as
+does a scaled coefficient that overflows the operator's dtype. Entries that
+become 0 are dropped (so a [restricted plan](restricted-operator.md) never reads
+them) and `row_sums` are recomputed. Only the cells the operator reads are looked
+at, and the digest covers exactly those weights.
 
 With \(W_j\) the count in cell \(j\) and \(a_j\) its spherical area,
 `ReduceOperator.compute(stencil, ...).reweight(W / a)` is the cell-mean density
-weighting \(M^0_{ij} W_j / a_j\): the same mean as
-[`reduce_with_stencil(..., weight_key=...)`](masked.md) with that density as the
-weight. It assumes the count is uniform within a cell, which
-`compute_weighted` does not.
+weighting \(M^0_{ij} W_j / a_j\). When the stencil is on the source grid, that
+is the same mean as [`reduce_with_stencil(..., weight_key=...)`](masked.md) with
+that density as the weight. When `compute` fuses a resampler (a stencil on a
+finer grid), `reweight` scales the source cells after fusion while `weight_key`
+weights the stencil's own cells, and the two differ. Either way it assumes the
+count is uniform within a cell, which `compute_weighted` does not.
 
 ### Stacking batches
 

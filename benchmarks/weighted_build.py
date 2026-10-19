@@ -2,7 +2,8 @@
 
 Run: ``uv run python -m benchmarks.weighted_build``.
 The window is 2400 x 4200 float32 pixels (35-55 N, 10 W-25 E, 38 MiB), 60 % of them empty. Peak is tracemalloc's,
-so it counts NumPy and pandas allocations and not exactextract's own coverage grid (at most
+so it counts NumPy and pandas allocations, including the contiguous copy of a zone's box of counts that
+exactextract reads, and not exactextract's native buffers such as its coverage grid (at most
 ``max_cells_in_memory`` cells per polygon). The window is allocated before tracing starts.
 """
 

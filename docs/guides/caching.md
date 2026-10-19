@@ -18,6 +18,26 @@ These precomputed objects depend only on their inputs, not on grid values:
 None of them depends on the grid **values** — so a single cached object serves every
 time step, member, and band on that grid.
 
+### Weighted, reweighted and stacked operators
+
+[`ReduceOperator.compute_weighted`, `reweight` and `concat`](../concepts/reduce-operator.md#weighted-by-counts-on-a-fine-lattice)
+return ordinary `ReduceOperator`s, but there is **no `get_or_compute_*` helper** for
+them: their digests are computed while building, from the counts, the cell weights a
+reweight reads and the parts of a stack, so there is no key to look up before the
+build. Cache them yourself:
+
+- store `op.to_npz()` under a key of your own (for example the version of the counts
+  raster, the zones and the source grid) and restore it with `ReduceOperator.from_npz`;
+- or keep the [`RestrictedOperator`](../concepts/restricted-operator.md) built from
+  one, whose `to_npz()` archive carries the coefficients it reads.
+  `get_or_compute_restricted_operator` takes the built operator, so it caches the
+  read plan, not the weighted build.
+
+A weighted digest covers the window's extent as well as its counts and the zones: the
+same zones over a wider window of the same raster, or batched differently before a
+`concat`, give a different digest for the same coefficients. Do not use it as a
+cross-run cache key unless the windows and batches are fixed.
+
 ## Content-addressed keys
 
 Each object's cache key is a **SHA-256 digest of its inputs**, computed *without building
