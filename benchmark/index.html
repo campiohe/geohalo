@@ -1006,6 +1006,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#weighted-build-compute_weighted" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Weighted build (compute_weighted)
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1113,6 +1124,17 @@
     <span class="md-ellipsis">
       
         Bias tree (cache miss/hit + hot)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#weighted-build-compute_weighted" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Weighted build (compute_weighted)
       
     </span>
   </a>
@@ -1683,6 +1705,88 @@ Timing: hot/hit rows 2 warmup + 7 iters; miss rows 1 warmup + 3 iters (global 0.
 </tr>
 </tbody>
 </table>
+<h2 id="weighted-build-compute_weighted">Weighted build (compute_weighted)<a class="headerlink" href="#weighted-build-compute_weighted" title="Permanent link">&para;</a></h2>
+<p>Run: <code>uv run python -m benchmarks.weighted_build</code> (3 repeats; median).
+Environment: Python 3.14.4 on Linux x86_64 (WSL2), geohalo 2.2.0, scipy 1.17.1, numpy 2.4.6, shapely 2.1.2, exactextract 0.3.0, geopandas 1.1.3, pandas 3.0.3.
+Hardware: Intel Core Ultra 7 265H (16 threads), 21 GB RAM; load average about 1 while measured.
+Window: 2400x4200 = 10.1M pixels at 30 arc-seconds (35-55 N, 10 W-25 E), 38 MiB float32, 4.0M inhabited. Zones: one disc of radius 9.4 degrees (4.0M pixels, 1.6M of them inhabited), or Voronoi cells tiling the window. Float32 operators on the global 0.25 and 0.05 degree grids.</p>
+<table>
+<thead>
+<tr>
+<th>Grid</th>
+<th style="text-align: right;">Zones</th>
+<th style="text-align: right;">Median s</th>
+<th style="text-align: right;">Traced peak MiB</th>
+<th style="text-align: right;">nnz</th>
+<th style="text-align: right;">NPZ KiB</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0.25</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">0.24</td>
+<td style="text-align: right;">99</td>
+<td style="text-align: right;">4,596</td>
+<td style="text-align: right;">55</td>
+</tr>
+<tr>
+<td>0.05</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">0.26</td>
+<td style="text-align: right;">100</td>
+<td style="text-align: right;">111,689</td>
+<td style="text-align: right;">959</td>
+</tr>
+<tr>
+<td>0.25</td>
+<td style="text-align: right;">200</td>
+<td style="text-align: right;">0.44</td>
+<td style="text-align: right;">13</td>
+<td style="text-align: right;">15,106</td>
+<td style="text-align: right;">140</td>
+</tr>
+<tr>
+<td>0.05</td>
+<td style="text-align: right;">200</td>
+<td style="text-align: right;">0.50</td>
+<td style="text-align: right;">16</td>
+<td style="text-align: right;">291,496</td>
+<td style="text-align: right;">2,366</td>
+</tr>
+<tr>
+<td>0.25</td>
+<td style="text-align: right;">3000</td>
+<td style="text-align: right;">0.86</td>
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">28,410</td>
+<td style="text-align: right;">276</td>
+</tr>
+<tr>
+<td>0.05</td>
+<td style="text-align: right;">3000</td>
+<td style="text-align: right;">0.82</td>
+<td style="text-align: right;">13</td>
+<td style="text-align: right;">341,845</td>
+<td style="text-align: right;">2,793</td>
+</tr>
+</tbody>
+</table>
+<p>Peak memory is the caller's window, read in place (4 bytes per pixel in float32; float32 and float64 windows are not
+copied in either latitude order or with any strides), plus the larger of two things that do not overlap in time:</p>
+<ul>
+<li>while exactextract reads a zone, a contiguous copy of the window over the zone's bounding box, in the window's dtype
+  (exactextract's NumPy reader hands its native code a slice, which is made contiguous); for the disc, 5.1M pixels in
+  float32, 19 MiB;</li>
+<li>after it, about 24 bytes per inhabited pixel covered by the 16 geometries of one exactextract call (<code>cell_id</code>,
+  <code>coverage</code>, <code>values</code>), plus about 40 bytes per inhabited pixel of the largest zone for sorting its pixels' cells
+  and summing into the cells they hit, and nothing per cell of its bounding box (the disc: 1.6M inhabited pixels,
+  37 + 64 MiB);</li>
+</ul>
+<p>and about 40 bytes per stored entry while the matrix is assembled and cast. exactextract's native buffers, such as a
+zone's coverage fractions over its box (at most <code>max_cells_in_memory</code> cells at a time), are not traced: for the disc
+the process's resident high-water mark rises 145 MiB against 100 MiB traced.</p>
+<p>It does not grow with the number of zones; a caller bounds it by batching zones into windows.</p>
 
 
 

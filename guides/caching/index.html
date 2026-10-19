@@ -827,6 +827,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="What is worth caching">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#weighted-reweighted-and-stacked-operators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Weighted, reweighted and stacked operators
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1095,6 +1112,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="What is worth caching">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#weighted-reweighted-and-stacked-operators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Weighted, reweighted and stacked operators
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1204,6 +1238,24 @@ The cache is what makes "once" stick across processes, machines, and repeated ru
 </table>
 <p>None of them depends on the grid <strong>values</strong> — so a single cached object serves every
 time step, member, and band on that grid.</p>
+<h3 id="weighted-reweighted-and-stacked-operators">Weighted, reweighted and stacked operators<a class="headerlink" href="#weighted-reweighted-and-stacked-operators" title="Permanent link">&para;</a></h3>
+<p><a href="../../concepts/reduce-operator/#weighted-by-counts-on-a-fine-lattice"><code>ReduceOperator.compute_weighted</code>, <code>reweight</code> and <code>concat</code></a>
+return ordinary <code>ReduceOperator</code>s, but there is <strong>no <code>get_or_compute_*</code> helper</strong> for
+them: their digests are computed while building, from the counts, the cell weights a
+reweight reads and the parts of a stack, so there is no key to look up before the
+build. Cache them yourself:</p>
+<ul>
+<li>store <code>op.to_npz()</code> under a key of your own (for example the version of the counts
+  raster, the zones and the source grid) and restore it with <code>ReduceOperator.from_npz</code>;</li>
+<li>or keep the <a href="../../concepts/restricted-operator/"><code>RestrictedOperator</code></a> built from
+  one, whose <code>to_npz()</code> archive carries the coefficients it reads.
+  <code>get_or_compute_restricted_operator</code> takes the built operator, so it caches the
+  read plan, not the weighted build.</li>
+</ul>
+<p>A weighted digest covers the window's extent as well as its counts and the zones: the
+same zones over a wider window of the same raster, or batched differently before a
+<code>concat</code>, give a different digest for the same coefficients. Do not use it as a
+cross-run cache key unless the windows and batches are fixed.</p>
 <h2 id="content-addressed-keys">Content-addressed keys<a class="headerlink" href="#content-addressed-keys" title="Permanent link">&para;</a></h2>
 <p>Each object's cache key is a <strong>SHA-256 digest of its inputs</strong>, computed <em>without building
 the object</em>. A hit returns the stored blob and never runs the expensive build:</p>

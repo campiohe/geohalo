@@ -1206,6 +1206,39 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#geohalo.ReduceOperator.compute_weighted" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute_weighted
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#geohalo.ReduceOperator.reweight" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        reweight
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#geohalo.ReduceOperator.concat" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        concat
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1685,6 +1718,39 @@
     <span class="md-ellipsis">
       
         compute
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#geohalo.ReduceOperator.compute_weighted" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute_weighted
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#geohalo.ReduceOperator.reweight" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        reweight
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#geohalo.ReduceOperator.concat" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        concat
       
     </span>
   </a>
@@ -2471,6 +2537,125 @@ inputs retain normal promotion, so means are never truncated to integers.</p>
 stencil's float64 row sums are retained; casting does not sort entries.
 Request float32 explicitly even if the stencil already uses float32.
 <code>period=360</code> wraps resampling in longitude, not polygon geometries.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="geohalo.ReduceOperator.compute_weighted" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">compute_weighted</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-classmethod"><code>classmethod</code></small>
+  </span>
+
+<a href="#geohalo.ReduceOperator.compute_weighted" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">compute_weighted</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">geometries</span><span class="p">:</span> <span class="n">GeoSeries</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">weight_lat</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">weight_lon</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">weights</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">source_lat</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">source_lon</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="o">*</span><span class="p">,</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">dtype</span><span class="p">:</span> <span class="n">DTypeLike</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">period</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReduceOperator</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Weight each geometry's cells by the counts of a fine lattice that nests in the source grid.</p>
+<p><code>matrix[i, j]</code> is the sum over the pixels <code>k</code> of cell <code>j</code> of
+<code>coverage(i, k) * weights[k]</code>, where the coverage is the planar
+fraction of the pixel inside the geometry (exactextract, as
+:meth:<code>Stencil.compute</code> takes it). <code>row_sums</code> are the float64 sums of
+the stored coefficients, so <code>how="mean"</code> answers
+<code>sum_j M_ij x_j / sum_j M_ij</code>.</p>
+<p><code>weight_lat</code>/<code>weight_lon</code> are the centres of a regular window of the
+lattice, latitude in either order and longitude ascending; <code>weights</code>
+has shape <code>(weight_lat.size, weight_lon.size)</code> in that order and holds
+counts per pixel. NaN and masked counts are 0; negative or infinite
+counts raise ValueError. <code>source_lat</code> may run either way and is stored
+ascending, as in :meth:<code>compute</code>.</p>
+<p>A pixel counts in the source cell that holds its centre. Without
+<code>period</code>, the window and the source longitudes are read in one frame,
+and the part of a geometry outside the source grid is not counted, as
+with :meth:<code>compute</code>: a pixel whose centre is off the grid is dropped
+with its count. <code>period=360</code> moves each pixel centre by a multiple of
+360 onto the source grid's frame first, so a window across 0° reaches a
+0..360 grid; it is validated as in :meth:<code>compute</code> and is part of the
+digest.</p>
+<p>Raises ValueError when a source cell edge inside the window, or a copy
+of it <code>period</code> apart, is not a pixel edge to within a thousandth of a
+pixel, when a geometry's bounds leave the window, or when a coefficient
+overflows <code>dtype</code>; EmptyOverlapError when a geometry covers no area of
+the source grid inside the window. A geometry whose pixels all weigh 0
+has a row of zeros (no stored entries), which a mean with
+<code>skipna=True</code> answers as NaN.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="geohalo.ReduceOperator.reweight" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">reweight</span>
+
+
+<a href="#geohalo.ReduceOperator.reweight" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">reweight</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">cell_weights</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">descending</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReduceOperator</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Scale each column by its cell's weight; <code>cell_weights</code> has the source grid's shape.</p>
+<p><code>descending=True</code> reads its rows north to south, as :meth:<code>apply_grid</code>
+does. NaN and masked weights are 0; a negative or infinite weight on a
+cell the operator reads, or a scaled coefficient that overflows the
+operator's dtype, raises ValueError. Entries that become 0 are dropped
+and <code>row_sums</code> are recomputed in float64 from the stored
+coefficients. Only the cells the operator reads are looked at, and the
+digest covers exactly those weights.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="geohalo.ReduceOperator.concat" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">concat</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-classmethod"><code>classmethod</code></small>
+  </span>
+
+<a href="#geohalo.ReduceOperator.concat" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">concat</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">operators</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">ReduceOperator</span><span class="p">],</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReduceOperator</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Stack operators' rows in order.</p>
+<p>They share one source grid, coefficient dtype, iteration count and key
+names, and no key repeats. One operator is returned as it is; otherwise
+the digest covers the parts' digests in order.</p>
 
 
     </div>

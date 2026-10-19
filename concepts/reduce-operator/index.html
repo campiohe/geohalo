@@ -680,6 +680,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#weighted-by-counts-on-a-fine-lattice" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Weighted by counts on a fine lattice
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Weighted by counts on a fine lattice">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reweighting-by-cell" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reweighting by cell
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#stacking-batches" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stacking batches
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#application-memory" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1176,6 +1215,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#weighted-by-counts-on-a-fine-lattice" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Weighted by counts on a fine lattice
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Weighted by counts on a fine lattice">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reweighting-by-cell" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reweighting by cell
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#stacking-batches" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stacking batches
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#application-memory" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1362,6 +1440,114 @@ For target-cell masking or per-cell weights, use
 <code>RestrictedOperator.apply</code>. Low-level callers can use
 <code>op.apply_grid(values, how="mean", skipna=True)</code>; <code>apply_grid</code> still defaults
 to an unnormalized sum, unlike the higher-level reducers.</p>
+<h2 id="weighted-by-counts-on-a-fine-lattice">Weighted by counts on a fine lattice<a class="headerlink" href="#weighted-by-counts-on-a-fine-lattice" title="Permanent link">&para;</a></h2>
+<p><code>ReduceOperator.compute_weighted</code> builds an operator whose entries are <strong>counts</strong>
+(for example people per 30 arc-second pixel) instead of covered area. With zones
+<span class="arithmatex">\(i\)</span>, source cells <span class="arithmatex">\(j\)</span>, pixels <span class="arithmatex">\(k\)</span> of a fine lattice, <span class="arithmatex">\(p_k\)</span> the count of
+pixel <span class="arithmatex">\(k\)</span> and <span class="arithmatex">\(c_{ik}\)</span> the planar fraction of pixel <span class="arithmatex">\(k\)</span> inside zone <span class="arithmatex">\(i\)</span>:</p>
+<div class="arithmatex">\[
+M_{ij} \;=\; \sum_{k \in j} c_{ik}\, p_k
+\qquad
+\text{row\_sums}_i \;=\; \sum_j M_{ij}
+\]</div>
+<p><code>row_sums</code> are float64 sums of the stored coefficients, so
+<code>apply_grid(x, how="mean", skipna=True)</code> answers
+<span class="arithmatex">\(\sum_j M_{ij} x_j \,/\, \sum_{j\,\text{present}} M_{ij}\)</span>. A border cell counts
+only the pixels on the zone's side of the border.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">geopandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gpd</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">box</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="kn">import</span><span class="w"> </span><span class="nn">geohalo</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ghl</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">pixel</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">/</span> <span class="mi">120</span>                                     <span class="c1"># 30 arc-seconds</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">weight_lat</span> <span class="o">=</span> <span class="mf">48.0</span> <span class="o">-</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">720</span><span class="p">)</span> <span class="o">+</span> <span class="mf">0.5</span><span class="p">)</span> <span class="o">*</span> <span class="n">pixel</span>  <span class="c1"># 42-48 N, north to south</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="n">weight_lon</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">+</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">720</span><span class="p">)</span> <span class="o">+</span> <span class="mf">0.5</span><span class="p">)</span> <span class="o">*</span> <span class="n">pixel</span>   <span class="c1"># 2-8 E</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="n">people</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="n">weight_lat</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="n">weight_lon</span><span class="o">.</span><span class="n">size</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="n">source_lat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mf">49.875</span><span class="p">,</span> <span class="mf">40.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.25</span><span class="p">)</span>         <span class="c1"># 0.25 degree cells</span>
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="n">source_lon</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mf">0.125</span><span class="p">,</span> <span class="mf">10.0</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">)</span>
+</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="n">zones</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">([</span><span class="n">box</span><span class="p">(</span><span class="mf">3.1</span><span class="p">,</span> <span class="mf">43.2</span><span class="p">,</span> <span class="mf">6.9</span><span class="p">,</span> <span class="mf">46.8</span><span class="p">)],</span> <span class="n">index</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;zone&quot;</span><span class="p">])</span>
+</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>
+</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="n">op</span> <span class="o">=</span> <span class="n">ghl</span><span class="o">.</span><span class="n">ReduceOperator</span><span class="o">.</span><span class="n">compute_weighted</span><span class="p">(</span>
+</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>    <span class="n">zones</span><span class="p">,</span> <span class="n">weight_lat</span><span class="p">,</span> <span class="n">weight_lon</span><span class="p">,</span> <span class="n">people</span><span class="p">,</span> <span class="n">source_lat</span><span class="p">,</span> <span class="n">source_lon</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a><span class="p">)</span>
+</span><span id="__span-3-18"><a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a><span class="n">field</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="n">source_lat</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="n">source_lon</span><span class="o">.</span><span class="n">size</span><span class="p">))</span>
+</span><span id="__span-3-19"><a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a><span class="n">mean</span> <span class="o">=</span> <span class="n">op</span><span class="o">.</span><span class="n">apply_grid</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">descending</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;mean&quot;</span><span class="p">,</span> <span class="n">skipna</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span></code></pre></div>
+<p>The window of counts is regular, its latitude in either order and its longitude
+ascending. Every source cell edge <strong>inside</strong> the window must be a pixel edge, to
+within a thousandth of a pixel, so the pixels sum exactly into cells: a pixel
+goes to the cell that holds its centre, half a pixel from either edge, and a
+float32 0.1° grid nests in a 30″ lattice as its float64 twin does. A grid that
+does not nest is refused with <code>ValueError</code>, as is a geometry whose bounds leave
+the window. A geometry that covers no area of the source grid inside the window
+raises <code>EmptyOverlapError</code>. A float32 or float64 window is read in place, never
+copied, in either latitude order and with any strides (a slice of a larger
+raster, for example); other dtypes and masked arrays are converted first.</p>
+<p><strong>Counts, not densities.</strong> The coverage <span class="arithmatex">\(c_{ik}\)</span> is exactextract's planar
+fraction of a pixel, never multiplied by an area: a count already carries the
+pixel's size. Planar and spherical fractions inside one pixel differ by at most
+<span class="arithmatex">\((\Delta\varphi_\text{pixel}/2)\tan|\varphi|\)</span>, about <span class="arithmatex">\(7\times10^{-5}\tan|\varphi|\)</span>
+for 30″ pixels, and only on partially covered pixels. Against
+<a href="#reduceoperator"><code>compute</code></a>:</p>
+<ul>
+<li>uniform counts (<span class="arithmatex">\(p_k = 1\)</span>) reproduce, row-normalised, the planar stencil
+  (<code>spherical_correction=False</code>);</li>
+<li>counts proportional to pixel area (a uniform density) reproduce <code>compute</code> on
+  fully covered cells and on row sums;</li>
+<li>on partially covered cells they differ by at most
+  <span class="arithmatex">\((\Delta\varphi_\text{cell}/2)\tan|\varphi|\)</span> relative (0.22 % for 0.25° cells
+  at 45°), which is <code>compute</code>'s own planar approximation inside a coarse cell.</li>
+</ul>
+<p><strong>Missing and empty pixels.</strong> NaN and masked counts are 0; negative or infinite
+counts raise <code>ValueError</code>, as does a coefficient that overflows the operator's
+dtype (float32 counts summing past 3.4e38 in a cell, say). Pixels with a zero or
+NaN count never leave exactextract, so the Python-side cost is proportional to
+inhabited pixels. A geometry over pixels that all weigh 0 has a row of zeros (no
+stored entries): its mean is NaN with <code>skipna=True</code>, and with <code>skipna=False</code> it
+is 0/0, NaN with NumPy's <code>RuntimeWarning: invalid value encountered in divide</code>.</p>
+<p><strong>Off the source grid, and longitude frames.</strong> A pixel counts in the source cell
+that holds its centre. Without <code>period</code>, the window and the source longitudes are
+read in one frame, and the part of a geometry outside the source grid is not
+counted, as with <code>compute</code>: a pixel whose centre is off the grid is dropped with
+its count. That is what a regional source grid needs, but on a 0..360 grid it
+means a zone across 0° counts only its eastern part. <code>period=360</code> moves each
+pixel centre by a multiple of 360 into the source grid's frame before it is
+assigned, so a window in -180..180 reaches a 0..360 grid, and the nesting and
+overlap checks look at the grid's copies 360° apart. <code>period</code> is validated as in
+<code>compute</code> and is part of the digest; geometries are never moved, so they stay in
+the window's frame.</p>
+<p><strong>Build memory.</strong> Besides the caller's window, a build holds a copy of the
+window over one zone's bounding box at a time (exactextract makes it while it
+reads the zone), or, once it has, about 24 bytes per inhabited pixel under the 16
+zones of one exactextract call and about 40 more per inhabited pixel of the
+largest zone; and about 40 bytes per stored entry. It does not grow with the
+number of zones. See the <a href="../../benchmark/#weighted-build-compute_weighted">benchmark</a>.</p>
+<h3 id="reweighting-by-cell">Reweighting by cell<a class="headerlink" href="#reweighting-by-cell" title="Permanent link">&para;</a></h3>
+<p><code>op.reweight(cell_weights, descending=False)</code> scales each column of an existing
+operator by its cell's weight (<code>cell_weights</code> has the source grid's shape;
+<code>descending=True</code> reads it north to south). NaN and masked weights are 0;
+negative or infinite weights on cells the operator reads raise <code>ValueError</code>, as
+does a scaled coefficient that overflows the operator's dtype. Entries that
+become 0 are dropped (so a <a href="../restricted-operator/">restricted plan</a> never reads
+them) and <code>row_sums</code> are recomputed. Only the cells the operator reads are looked
+at, and the digest covers exactly those weights.</p>
+<p>With <span class="arithmatex">\(W_j\)</span> the count in cell <span class="arithmatex">\(j\)</span> and <span class="arithmatex">\(a_j\)</span> its spherical area,
+<code>ReduceOperator.compute(stencil, ...).reweight(W / a)</code> is the cell-mean density
+weighting <span class="arithmatex">\(M^0_{ij} W_j / a_j\)</span>. When the stencil is on the source grid, that
+is the same mean as <a href="../masked/"><code>reduce_with_stencil(..., weight_key=...)</code></a> with
+that density as the weight. When <code>compute</code> fuses a resampler (a stencil on a
+finer grid), <code>reweight</code> scales the source cells after fusion while <code>weight_key</code>
+weights the stencil's own cells, and the two differ. Either way it assumes the
+count is uniform within a cell, which <code>compute_weighted</code> does not.</p>
+<h3 id="stacking-batches">Stacking batches<a class="headerlink" href="#stacking-batches" title="Permanent link">&para;</a></h3>
+<p><code>ReduceOperator.concat(operators)</code> stacks operators' rows in order. They must
+share one source grid, coefficient dtype, iteration count and key names, and no
+key may repeat. Zones built in batches, each over its own window, stack into the
+operator built at once over one window. The stacked digest covers the parts'
+digests, so it depends on the batching.</p>
+<p>The three methods return ordinary <code>ReduceOperator</code>s: they apply, restrict and
+<a href="../serialization/">serialize</a> like any other.</p>
 <h2 id="application-memory">Application memory<a class="headerlink" href="#application-memory" title="Permanent link">&para;</a></h2>
 <p><code>reduce_with_operator</code> reads values in their stored latitude order. For large
 grids, it gathers the source cells referenced by the matrix and applies one

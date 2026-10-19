@@ -1357,6 +1357,9 @@ boundary generally does not, even if the polygon is a lat/lon rectangle.</p>
 against <code>polygon_areas</code> are therefore approximate coverage diagnostics, not an
 exact coverage fraction guaranteed to lie in [0, 1]. This helper leaves existing
 stencil construction and reduction results unchanged.</p>
+<p>Operators <a href="../reduce-operator/#weighted-by-counts-on-a-fine-lattice">weighted by counts</a>
+take no cell area at all: their entries and <code>row_sums</code> are counts, which already
+carry the size of a pixel, not m².</p>
 
 
 
