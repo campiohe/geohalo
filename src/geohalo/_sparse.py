@@ -27,6 +27,20 @@ def cast_matrix(matrix: sp.csr_matrix, dtype: np.dtype) -> sp.csr_matrix:
     return sp.csr_matrix((matrix.data.astype(dtype), matrix.indices, matrix.indptr), shape=matrix.shape)
 
 
+def require_finite_coefficients(matrix: sp.csr_matrix) -> None:
+    """Raise if a stored coefficient is infinite or NaN, as one that overflowed its dtype is."""
+    if not np.isfinite(matrix.data).all():
+        raise ValueError(f"the coefficients overflow {matrix.dtype.name}; scale the weights down")
+
+
+def stored_row_sums(matrix: sp.csr_matrix) -> np.ndarray:
+    """Float64 row sums of the stored coefficients, without a float64 copy of the matrix."""
+    sums = np.zeros(matrix.shape[0], dtype=np.float64)
+    nonempty = np.diff(matrix.indptr) > 0
+    sums[nonempty] = np.add.reduceat(matrix.data, matrix.indptr[:-1][nonempty], dtype=np.float64)
+    return sums
+
+
 def projection_dtype(
     value_dtype: np.dtype, matrix_dtype: np.dtype, row_sums: np.ndarray | None,
     *, preserve_dtype: bool = False,

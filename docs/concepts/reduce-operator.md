@@ -182,6 +182,130 @@ The same opt-in is available on `reduce_with_restricted_operator` and
 `op.apply_grid(values, how="mean", skipna=True)`; `apply_grid` still defaults
 to an unnormalized sum, unlike the higher-level reducers.
 
+## Weighted by counts on a fine lattice
+
+`ReduceOperator.compute_weighted` builds an operator whose entries are **counts**
+(for example people per 30 arc-second pixel) instead of covered area. With zones
+\(i\), source cells \(j\), pixels \(k\) of a fine lattice, \(p_k\) the count of
+pixel \(k\) and \(c_{ik}\) the planar fraction of pixel \(k\) inside zone \(i\):
+
+\[
+M_{ij} \;=\; \sum_{k \in j} c_{ik}\, p_k
+\qquad
+\text{row\_sums}_i \;=\; \sum_j M_{ij}
+\]
+
+`row_sums` are float64 sums of the stored coefficients, so
+`apply_grid(x, how="mean", skipna=True)` answers
+\(\sum_j M_{ij} x_j \,/\, \sum_{j\,\text{present}} M_{ij}\). A border cell counts
+only the pixels on the zone's side of the border.
+
+```python
+import geopandas as gpd
+import numpy as np
+from shapely.geometry import box
+import geohalo as ghl
+
+pixel = 1 / 120                                     # 30 arc-seconds
+weight_lat = 48.0 - (np.arange(720) + 0.5) * pixel  # 42-48 N, north to south
+weight_lon = 2.0 + (np.arange(720) + 0.5) * pixel   # 2-8 E
+people = np.ones((weight_lat.size, weight_lon.size), dtype=np.float32)
+
+source_lat = np.arange(49.875, 40.0, -0.25)         # 0.25 degree cells
+source_lon = np.arange(0.125, 10.0, 0.25)
+zones = gpd.GeoSeries([box(3.1, 43.2, 6.9, 46.8)], index=["zone"])
+
+op = ghl.ReduceOperator.compute_weighted(
+    zones, weight_lat, weight_lon, people, source_lat, source_lon, dtype=np.float32,
+)
+field = np.random.default_rng(0).normal(size=(source_lat.size, source_lon.size))
+mean = op.apply_grid(field, descending=True, how="mean", skipna=True)
+```
+
+The window of counts is regular, its latitude in either order and its longitude
+ascending. Every source cell edge **inside** the window must be a pixel edge, to
+within a thousandth of a pixel, so the pixels sum exactly into cells: a pixel
+goes to the cell that holds its centre, half a pixel from either edge, and a
+float32 0.1° grid nests in a 30″ lattice as its float64 twin does. A grid that
+does not nest is refused with `ValueError`, as is a geometry whose bounds leave
+the window. A geometry that covers no area of the source grid inside the window
+raises `EmptyOverlapError`. A float32 or float64 window is read in place, never
+copied, in either latitude order and with any strides (a slice of a larger
+raster, for example); other dtypes and masked arrays are converted first.
+
+**Counts, not densities.** The coverage \(c_{ik}\) is exactextract's planar
+fraction of a pixel, never multiplied by an area: a count already carries the
+pixel's size. Planar and spherical fractions inside one pixel differ by at most
+\((\Delta\varphi_\text{pixel}/2)\tan|\varphi|\), about \(7\times10^{-5}\tan|\varphi|\)
+for 30″ pixels, and only on partially covered pixels. Against
+[`compute`](#reduceoperator):
+
+- uniform counts (\(p_k = 1\)) reproduce, row-normalised, the planar stencil
+  (`spherical_correction=False`);
+- counts proportional to pixel area (a uniform density) reproduce `compute` on
+  fully covered cells and on row sums;
+- on partially covered cells they differ by at most
+  \((\Delta\varphi_\text{cell}/2)\tan|\varphi|\) relative (0.22 % for 0.25° cells
+  at 45°), which is `compute`'s own planar approximation inside a coarse cell.
+
+**Missing and empty pixels.** NaN and masked counts are 0; negative or infinite
+counts raise `ValueError`, as does a coefficient that overflows the operator's
+dtype (float32 counts summing past 3.4e38 in a cell, say). Pixels with a zero or
+NaN count never leave exactextract, so the Python-side cost is proportional to
+inhabited pixels. A geometry over pixels that all weigh 0 has a row of zeros (no
+stored entries): its mean is NaN with `skipna=True`, and with `skipna=False` it
+is 0/0, NaN with NumPy's `RuntimeWarning: invalid value encountered in divide`.
+
+**Off the source grid, and longitude frames.** A pixel counts in the source cell
+that holds its centre. Without `period`, the window and the source longitudes are
+read in one frame, and the part of a geometry outside the source grid is not
+counted, as with `compute`: a pixel whose centre is off the grid is dropped with
+its count. That is what a regional source grid needs, but on a 0..360 grid it
+means a zone across 0° counts only its eastern part. `period=360` moves each
+pixel centre by a multiple of 360 into the source grid's frame before it is
+assigned, so a window in -180..180 reaches a 0..360 grid, and the nesting and
+overlap checks look at the grid's copies 360° apart. `period` is validated as in
+`compute` and is part of the digest; geometries are never moved, so they stay in
+the window's frame.
+
+**Build memory.** Besides the caller's window, a build holds a copy of the
+window over one zone's bounding box at a time (exactextract makes it while it
+reads the zone), or, once it has, about 24 bytes per inhabited pixel under the 16
+zones of one exactextract call and about 40 more per inhabited pixel of the
+largest zone; and about 40 bytes per stored entry. It does not grow with the
+number of zones. See the [benchmark](../benchmark.md#weighted-build-compute_weighted).
+
+### Reweighting by cell
+
+`op.reweight(cell_weights, descending=False)` scales each column of an existing
+operator by its cell's weight (`cell_weights` has the source grid's shape;
+`descending=True` reads it north to south). NaN and masked weights are 0;
+negative or infinite weights on cells the operator reads raise `ValueError`, as
+does a scaled coefficient that overflows the operator's dtype. Entries that
+become 0 are dropped (so a [restricted plan](restricted-operator.md) never reads
+them) and `row_sums` are recomputed. Only the cells the operator reads are looked
+at, and the digest covers exactly those weights.
+
+With \(W_j\) the count in cell \(j\) and \(a_j\) its spherical area,
+`ReduceOperator.compute(stencil, ...).reweight(W / a)` is the cell-mean density
+weighting \(M^0_{ij} W_j / a_j\). When the stencil is on the source grid, that
+is the same mean as [`reduce_with_stencil(..., weight_key=...)`](masked.md) with
+that density as the weight. When `compute` fuses a resampler (a stencil on a
+finer grid), `reweight` scales the source cells after fusion while `weight_key`
+weights the stencil's own cells, and the two differ. Either way it assumes the
+count is uniform within a cell, which `compute_weighted` does not.
+
+### Stacking batches
+
+`ReduceOperator.concat(operators)` stacks operators' rows in order. They must
+share one source grid, coefficient dtype, iteration count and key names, and no
+key may repeat. Zones built in batches, each over its own window, stack into the
+operator built at once over one window. The stacked digest covers the parts'
+digests, so it depends on the batching.
+
+The three methods return ordinary `ReduceOperator`s: they apply, restrict and
+[serialize](serialization.md) like any other.
+
 ## Application memory
 
 `reduce_with_operator` reads values in their stored latitude order. For large

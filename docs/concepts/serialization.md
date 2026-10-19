@@ -40,6 +40,8 @@ using the restored `keys`. Digests identify build inputs, not row permutations.
 - Index names, dtypes, duplicates, order, MultiIndex levels/codes (including
   unused levels and missing codes), categorical categories/order, and date/time
   index frequency and timezone metadata.
+- Operators from `ReduceOperator.compute_weighted`, `reweight` and `concat`:
+  they are `ReduceOperator`s and use its archive unchanged.
 
 Apply-time caches such as compact matrix views are not serialized. They are
 rebuilt lazily from the restored arrays. Input geometries and original tree

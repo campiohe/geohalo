@@ -150,3 +150,7 @@ The stencil also only includes the portion inside its grid footprint. Ratios
 against `polygon_areas` are therefore approximate coverage diagnostics, not an
 exact coverage fraction guaranteed to lie in [0, 1]. This helper leaves existing
 stencil construction and reduction results unchanged.
+
+Operators [weighted by counts](reduce-operator.md#weighted-by-counts-on-a-fine-lattice)
+take no cell area at all: their entries and `row_sums` are counts, which already
+carry the size of a pixel, not m².

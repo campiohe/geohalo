@@ -13,18 +13,37 @@ magnitude smaller than ``T`` and its size is independent of the iteration count.
 """
 
 import hashlib
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import cached_property
 from typing import Literal
 
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
 from numpy.typing import DTypeLike
 
 from geohalo._serialization import NPZSerializable
-from geohalo._sparse import GridMatrix, cast_matrix, operator_dtype
-from geohalo.geometry import _validate_period, ensure_ascending_lats, grid_digest, same_grid
+from geohalo._sparse import GridMatrix, cast_matrix, operator_dtype, require_finite_coefficients, stored_row_sums
+from geohalo._weighted import (
+    counts_digest,
+    periodic_shifts,
+    real_array,
+    require_inside,
+    require_nested,
+    weight_window,
+    weighted_matrix,
+)
+from geohalo.geometry import (
+    _validate_period,
+    ensure_ascending_lats,
+    geom_digest,
+    grid_digest,
+    midpoint_edges,
+    require_regular_grid,
+    same_grid,
+)
 from geohalo.resampler import FactoredResampler
 from geohalo.stencil import Stencil
 
@@ -145,4 +164,178 @@ class ReduceOperator(NPZSerializable):
             source_lon=src_lon,
             iterations=iterations,
             digest=digest,
+        )
+
+    @classmethod
+    def compute_weighted(
+        cls,
+        geometries: gpd.GeoSeries,
+        weight_lat: np.ndarray,
+        weight_lon: np.ndarray,
+        weights: np.ndarray,
+        source_lat: np.ndarray,
+        source_lon: np.ndarray,
+        *,
+        dtype: DTypeLike = np.float64,
+        period: float | None = None,
+    ) -> "ReduceOperator":
+        """Weight each geometry's cells by the counts of a fine lattice that nests in the source grid.
+
+        ``matrix[i, j]`` is the sum over the pixels ``k`` of cell ``j`` of
+        ``coverage(i, k) * weights[k]``, where the coverage is the planar
+        fraction of the pixel inside the geometry (exactextract, as
+        :meth:`Stencil.compute` takes it). ``row_sums`` are the float64 sums of
+        the stored coefficients, so ``how="mean"`` answers
+        ``sum_j M_ij x_j / sum_j M_ij``.
+
+        ``weight_lat``/``weight_lon`` are the centres of a regular window of the
+        lattice, latitude in either order and longitude ascending; ``weights``
+        has shape ``(weight_lat.size, weight_lon.size)`` in that order and holds
+        counts per pixel. NaN and masked counts are 0; negative or infinite
+        counts raise ValueError. ``source_lat`` may run either way and is stored
+        ascending, as in :meth:`compute`.
+
+        A pixel counts in the source cell that holds its centre. Without
+        ``period``, the window and the source longitudes are read in one frame,
+        and the part of a geometry outside the source grid is not counted, as
+        with :meth:`compute`: a pixel whose centre is off the grid is dropped
+        with its count. ``period=360`` moves each pixel centre by a multiple of
+        360 onto the source grid's frame first, so a window across 0° reaches a
+        0..360 grid; it is validated as in :meth:`compute` and is part of the
+        digest.
+
+        Raises ValueError when a source cell edge inside the window, or a copy
+        of it ``period`` apart, is not a pixel edge to within a thousandth of a
+        pixel, when a geometry's bounds leave the window, or when a coefficient
+        overflows ``dtype``; EmptyOverlapError when a geometry covers no area of
+        the source grid inside the window. A geometry whose pixels all weigh 0
+        has a row of zeros (no stored entries), which a mean with
+        ``skipna=True`` answers as NaN.
+        """
+        dtype = operator_dtype(dtype)
+        if not isinstance(geometries, gpd.GeoSeries):
+            raise TypeError(f"geometries must be a gpd.GeoSeries, got {type(geometries).__name__}")
+        if len(geometries) == 0:
+            raise ValueError("geometries is empty; need at least one polygon")
+        if geometries.isna().any():
+            raise ValueError("geometries contains missing geometries; expected polygons")
+        if geometries.crs is not None and not geometries.crs.equals("EPSG:4326", ignore_axis_order=True):
+            raise ValueError("geometries must be in longitude/latitude degrees (EPSG:4326)")
+        window = weight_window(weight_lat, weight_lon, weights)
+        src_lat, _ = ensure_ascending_lats(source_lat)
+        src_lon = np.asarray(source_lon, dtype=np.float64)
+        require_regular_grid(src_lat, "latitude")
+        require_regular_grid(src_lon, "longitude")
+        if src_lon.size > 1 and src_lon[0] > src_lon[-1]:
+            raise ValueError("source_lon must ascend")
+        period = _validate_period(src_lon, period)
+        lat_edges, lon_edges = midpoint_edges(src_lat), midpoint_edges(src_lon)
+        shifts = periodic_shifts(lon_edges, window.west, window.east, period)
+        require_nested(lat_edges, window.south, window.lat_step, window.north, "latitude")
+        require_nested((lon_edges + shifts[:, None]).ravel(), window.west, window.lon_step, window.east, "longitude")
+        require_inside(geometries, window, lat_edges, lon_edges, period)
+
+        with np.errstate(over="ignore"):
+            matrix = cast_matrix(weighted_matrix(geometries, window, src_lat, src_lon, period), dtype)
+        require_finite_coefficients(matrix)
+        matrix.eliminate_zeros()
+        h = hashlib.sha256(b"geohalo:weighted:1")
+        h.update(geom_digest(geometries))
+        h.update(grid_digest(window.lat[::-1], window.lon))
+        h.update(counts_digest(window))
+        h.update(grid_digest(src_lat, src_lon))
+        h.update(dtype.name.encode())
+        if period is not None:
+            h.update(b"period:" + np.float64(period).tobytes())
+        return cls(
+            matrix=matrix,
+            row_sums=stored_row_sums(matrix),
+            keys=geometries.index,
+            source_lat=src_lat,
+            source_lon=src_lon,
+            iterations=1,
+            digest=h.digest(),
+        )
+
+    def reweight(self, cell_weights: np.ndarray, *, descending: bool = False) -> "ReduceOperator":
+        """Scale each column by its cell's weight; ``cell_weights`` has the source grid's shape.
+
+        ``descending=True`` reads its rows north to south, as :meth:`apply_grid`
+        does. NaN and masked weights are 0; a negative or infinite weight on a
+        cell the operator reads, or a scaled coefficient that overflows the
+        operator's dtype, raises ValueError. Entries that become 0 are dropped
+        and ``row_sums`` are recomputed in float64 from the stored
+        coefficients. Only the cells the operator reads are looked at, and the
+        digest covers exactly those weights.
+        """
+        shape = (self.source_lat.size, self.source_lon.size)
+        weights = real_array(cell_weights, "cell_weights")
+        if weights.shape != shape:
+            raise ValueError(f"cell_weights must have shape {shape}, got {weights.shape}")
+        rows, cols = np.divmod(self.matrix.indices, shape[1])
+        if descending:
+            rows = shape[0] - 1 - rows
+        scale = weights[rows, cols].astype(np.float64)
+        scale[np.isnan(scale)] = 0.0
+        if np.isinf(scale).any() or (scale < 0).any():
+            raise ValueError("cell_weights must not be negative or infinite; NaN is read as 0")
+        with np.errstate(over="ignore"):
+            scaled = (self.matrix.data.astype(np.float64) * scale).astype(self.matrix.dtype)
+        matrix = sp.csr_matrix(
+            (scaled, self.matrix.indices.copy(), self.matrix.indptr.copy()), shape=self.matrix.shape,
+        )
+        require_finite_coefficients(matrix)
+        matrix.eliminate_zeros()
+        columns, first = np.unique(self.matrix.indices, return_index=True)
+        h = hashlib.sha256(b"geohalo:reweighted:1")
+        h.update(self.digest)
+        h.update(columns.astype(np.int64).tobytes())
+        h.update((scale[first] + 0.0).tobytes())
+        return type(self)(
+            matrix=matrix,
+            row_sums=stored_row_sums(matrix),
+            keys=self.keys,
+            source_lat=self.source_lat,
+            source_lon=self.source_lon,
+            iterations=self.iterations,
+            digest=h.digest(),
+        )
+
+    @classmethod
+    def concat(cls, operators: Sequence["ReduceOperator"]) -> "ReduceOperator":
+        """Stack operators' rows in order.
+
+        They share one source grid, coefficient dtype, iteration count and key
+        names, and no key repeats. One operator is returned as it is; otherwise
+        the digest covers the parts' digests in order.
+        """
+        operators = list(operators)
+        if not operators:
+            raise ValueError("concat needs at least one operator")
+        first = operators[0]
+        for other in operators[1:]:
+            if not same_grid(other.source_lat, other.source_lon, first.source_lat, first.source_lon):
+                raise ValueError("operators must share one source grid")
+            if other.matrix.dtype != first.matrix.dtype:
+                raise ValueError("operators must share one coefficient dtype")
+            if other.iterations != first.iterations:
+                raise ValueError("operators must share one iteration count")
+            if list(other.keys.names) != list(first.keys.names):
+                raise ValueError("operators must share key names")
+        if len(operators) == 1:
+            return first
+        keys = first.keys.append([other.keys for other in operators[1:]])
+        if keys.has_duplicates:
+            raise ValueError(f"keys repeat across operators: {list(keys[keys.duplicated()].unique()[:10])!r}")
+        h = hashlib.sha256(b"geohalo:concat:1")
+        for other in operators:
+            h.update(other.digest)
+        return cls(
+            matrix=sp.vstack([other.matrix for other in operators], format="csr"),
+            row_sums=np.concatenate([np.asarray(other.row_sums, dtype=np.float64) for other in operators]),
+            keys=keys,
+            source_lat=first.source_lat,
+            source_lon=first.source_lon,
+            iterations=first.iterations,
+            digest=h.digest(),
         )
