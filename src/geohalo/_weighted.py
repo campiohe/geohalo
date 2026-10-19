@@ -79,11 +79,18 @@ def periodic_shifts(edges: np.ndarray, start: float, stop: float, period: float 
     return np.arange(first, last + 1) * period
 
 
+NESTING_TOL = 1e-3
+
+
 def require_nested(cell_edges: np.ndarray, start: float, step: float, stop: float, axis: str) -> None:
-    """Every cell edge strictly inside ``(start, stop)`` must be a pixel edge ``start + n * step``."""
-    inner = cell_edges[(cell_edges > start + COORD_TOL) & (cell_edges < stop - COORD_TOL)]
+    """Every cell edge strictly inside ``(start, stop)`` must be a pixel edge ``start + n * step``.
+
+    An edge may be off by ``NESTING_TOL * step``: a pixel is assigned by its centre, half a step from either edge.
+    """
+    tol = NESTING_TOL * step
+    inner = cell_edges[(cell_edges > start + tol) & (cell_edges < stop - tol)]
     off = np.abs(inner - (start + np.round((inner - start) / step) * step))
-    stray = inner[off > COORD_TOL]
+    stray = inner[off > tol]
     if stray.size:
         raise ValueError(f"the source {axis} edge {stray[0]:.9f} is not a pixel edge of the weight window")
 

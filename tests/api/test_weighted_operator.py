@@ -619,3 +619,22 @@ def test_a_period_compute_would_refuse_is_refused(period, message):
     zones, lat, lon, people = _across_zero()
     with pytest.raises(ValueError, match=message):
         ghl.ReduceOperator.compute_weighted(zones, lat, lon, people, *GLOBAL_360, period=period)
+
+
+def test_a_float32_source_grid_nests_as_its_float64_twin_does():
+    lat, lon = WINDOW
+    single = (np.linspace(90, -90, 1801).astype(np.float32), np.linspace(-180, 179.9, 3600).astype(np.float32))
+    double = (np.linspace(90, -90, 1801), np.linspace(-180, 179.9, 3600))
+    people = _pixel_areas(lat, lon)
+    ghl.ReduceOperator.compute(ghl.Stencil.compute(*double, _zones()), *single)
+    from_single = ghl.ReduceOperator.compute_weighted(_zones(), lat, lon, people, *single)
+    from_double = ghl.ReduceOperator.compute_weighted(_zones(), lat, lon, people, *double)
+    np.testing.assert_array_equal(from_single.matrix.toarray(), from_double.matrix.toarray())
+
+
+def test_nesting_allows_a_thousandth_of_a_pixel_and_no_more():
+    lat, lon = WINDOW
+    people = np.ones((lat.size, lon.size))
+    ghl.ReduceOperator.compute_weighted(_zones(), lat, lon, people, GRID[0] + 0.9e-3 * PIXEL, GRID[1])
+    with pytest.raises(ValueError, match="not a pixel edge"):
+        ghl.ReduceOperator.compute_weighted(_zones(), lat, lon, people, GRID[0] + 1.1e-3 * PIXEL, GRID[1])

@@ -204,11 +204,11 @@ class ReduceOperator(NPZSerializable):
         digest.
 
         Raises ValueError when a source cell edge inside the window, or a copy
-        of it ``period`` apart, is not a pixel edge (1e-9 degrees), or when a
-        geometry's bounds leave the window; EmptyOverlapError when a geometry
-        covers no area of the source grid inside the window. A geometry whose
-        pixels all weigh 0 has a row of zeros (no stored entries), which a mean
-        with ``skipna=True`` answers as NaN.
+        of it ``period`` apart, is not a pixel edge to within a thousandth of a
+        pixel, or when a geometry's bounds leave the window; EmptyOverlapError
+        when a geometry covers no area of the source grid inside the window. A
+        geometry whose pixels all weigh 0 has a row of zeros (no stored
+        entries), which a mean with ``skipna=True`` answers as NaN.
         """
         dtype = operator_dtype(dtype)
         if not isinstance(geometries, gpd.GeoSeries):
