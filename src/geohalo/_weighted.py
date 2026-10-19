@@ -51,7 +51,8 @@ def real_array(values: np.ndarray, name: str) -> np.ndarray:
 def weight_window(weight_lat: np.ndarray, weight_lon: np.ndarray, weights: np.ndarray) -> Window:
     """Validate a window of counts and orient it north to south, as exactextract reads a raster.
 
-    Float32 and float64 counts already north to south are not copied. A masked array's masked counts are NaN.
+    Float32 and float64 counts are not copied, whatever their order and strides; exactextract reads them as
+    views. A masked array's masked counts are NaN.
     """
     lat = np.asarray(weight_lat, dtype=np.float64)
     lon = np.asarray(weight_lon, dtype=np.float64)
@@ -73,7 +74,7 @@ def weight_window(weight_lat: np.ndarray, weight_lon: np.ndarray, weights: np.nd
     dlat = (lat[0] - lat[-1]) / (lat.size - 1)
     dlon = (lon[-1] - lon[0]) / (lon.size - 1)
     return Window(
-        lat=lat, lon=lon, counts=np.ascontiguousarray(counts),
+        lat=lat, lon=lon, counts=counts,
         north=float(lat[0] + dlat / 2), south=float(lat[-1] - dlat / 2),
         west=float(lon[0] - dlon / 2), east=float(lon[-1] + dlon / 2),
     )

@@ -74,3 +74,21 @@ def test_a_sparsely_inhabited_zone_holds_nothing_the_size_of_its_bounding_box():
     assert peak < 1.5 * people.nbytes
     inside = np.logical_and.outer((lat > 35.1) & (lat < 54.9), (lon > -9.9) & (lon < 24.9))
     np.testing.assert_allclose(op.row_sums, [people[inside].sum()], rtol=1e-12)
+
+
+def test_a_strided_or_south_to_north_window_is_read_in_place():
+    zones, lat, lon, people = _europe()
+    zones = zones.iloc[:40]
+    grid = (np.arange(89.875, -90.0, -0.25), np.arange(-179.875, 180.0, 0.25))
+    whole = ghl.ReduceOperator.compute_weighted(zones, lat, lon, people, *grid, dtype=np.float32)
+    wider = np.zeros((lat.size, lon.size + 240), dtype=np.float32)
+    wider[:, 120:-120] = people
+    strided = wider[:, 120:-120]
+    assert not strided.flags.c_contiguous
+    south_first = people[::-1].copy()
+    for window_lat, counts in ((lat, strided), (lat[::-1], south_first)):
+        op, peak = _traced(lambda window_lat=window_lat, counts=counts: ghl.ReduceOperator.compute_weighted(
+            zones, window_lat, lon, counts, *grid, dtype=np.float32))
+        assert peak < counts.nbytes
+        np.testing.assert_array_equal(op.matrix.toarray(), whole.matrix.toarray())
+        assert op.digest == whole.digest
