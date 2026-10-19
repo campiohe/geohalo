@@ -201,16 +201,20 @@ def test_cell_and_exact_agree_where_every_border_cell_is_empty():
     lat, lon = WINDOW
     zone = gpd.GeoSeries([shapely.box(4.1, 44.1, 5.9, 45.9)], index=["inner"])
     people = np.random.default_rng(1).gamma(0.5, 20, size=(lat.size, lon.size))
-    inside = np.add.outer((lat > 44.25) & (lat < 45.75), (lon > 4.25) & (lon < 5.75)) == 2
+    inside = np.logical_and.outer((lat > 44.25) & (lat < 45.75), (lon > 4.25) & (lon < 5.75))
     people[~inside] = 0.0
+    assert people.sum() > 1e5
     exact = ghl.ReduceOperator.compute_weighted(zone, lat, lon, people, *GRID, dtype=np.float32)
     unweighted = ghl.ReduceOperator.compute(ghl.Stencil.compute(*GRID, zone), *GRID, dtype=np.float32)
-    rows = np.searchsorted(-GRID[0], -lat)  # stored cell row of each pixel
-    cols = np.searchsorted(GRID[1] + 0.125, lon)
+    rows = np.searchsorted(-(GRID[0] - 0.125), -lat)  # stored row of the cell whose southern edge is below the pixel
+    cols = np.searchsorted(GRID[1] + 0.125, lon)  # column of the cell whose eastern edge is past the pixel
     per_cell = np.zeros((GRID[0].size, GRID[1].size))
     np.add.at(per_cell, (rows[:, None], cols[None, :]), people)
+    assert np.count_nonzero(per_cell) == 36
+    np.testing.assert_allclose(exact.row_sums, [people.sum()], rtol=1e-6)
     areas = cell_areas(GRID[0][::-1], GRID[1])[::-1]
     by_cell = unweighted.reweight(per_cell / areas, descending=True)
+    assert exact.matrix.nnz == by_cell.matrix.nnz == 36
     np.testing.assert_allclose(by_cell.matrix.toarray(), exact.matrix.toarray(), rtol=2e-7)
 
 
