@@ -638,3 +638,18 @@ def test_nesting_allows_a_thousandth_of_a_pixel_and_no_more():
     ghl.ReduceOperator.compute_weighted(_zones(), lat, lon, people, GRID[0] + 0.9e-3 * PIXEL, GRID[1])
     with pytest.raises(ValueError, match="not a pixel edge"):
         ghl.ReduceOperator.compute_weighted(_zones(), lat, lon, people, GRID[0] + 1.1e-3 * PIXEL, GRID[1])
+
+
+@pytest.mark.parametrize(("dtype", "scale"), [(np.float32, 1e35), (np.float64, 1e300)])
+def test_reweight_refuses_coefficients_that_overflow_their_dtype(dtype, scale):
+    op = ghl.ReduceOperator.compute(ghl.Stencil.compute(*GRID, _zones()), *GRID, dtype=dtype)
+    with pytest.raises(ValueError, match=f"overflow {np.dtype(dtype).name}"):
+        op.reweight(np.full((GRID[0].size, GRID[1].size), scale))
+
+
+@pytest.mark.parametrize(("dtype", "count"), [(np.float32, 1e36), (np.float64, 1e306)])
+def test_compute_weighted_refuses_coefficients_that_overflow_their_dtype(dtype, count):
+    lat, lon = WINDOW
+    people = np.full((lat.size, lon.size), count, dtype=dtype)
+    with pytest.raises(ValueError, match=f"overflow {np.dtype(dtype).name}"):
+        ghl.ReduceOperator.compute_weighted(_zones(), lat, lon, people, *GRID, dtype=dtype)

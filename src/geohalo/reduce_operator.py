@@ -25,7 +25,7 @@ import scipy.sparse as sp
 from numpy.typing import DTypeLike
 
 from geohalo._serialization import NPZSerializable
-from geohalo._sparse import GridMatrix, cast_matrix, operator_dtype, stored_row_sums
+from geohalo._sparse import GridMatrix, cast_matrix, operator_dtype, require_finite_coefficients, stored_row_sums
 from geohalo._weighted import (
     counts_digest,
     periodic_shifts,
@@ -205,10 +205,11 @@ class ReduceOperator(NPZSerializable):
 
         Raises ValueError when a source cell edge inside the window, or a copy
         of it ``period`` apart, is not a pixel edge to within a thousandth of a
-        pixel, or when a geometry's bounds leave the window; EmptyOverlapError
-        when a geometry covers no area of the source grid inside the window. A
-        geometry whose pixels all weigh 0 has a row of zeros (no stored
-        entries), which a mean with ``skipna=True`` answers as NaN.
+        pixel, when a geometry's bounds leave the window, or when a coefficient
+        overflows ``dtype``; EmptyOverlapError when a geometry covers no area of
+        the source grid inside the window. A geometry whose pixels all weigh 0
+        has a row of zeros (no stored entries), which a mean with
+        ``skipna=True`` answers as NaN.
         """
         dtype = operator_dtype(dtype)
         if not isinstance(geometries, gpd.GeoSeries):
@@ -233,7 +234,9 @@ class ReduceOperator(NPZSerializable):
         require_nested((lon_edges + shifts[:, None]).ravel(), window.west, window.lon_step, window.east, "longitude")
         require_inside(geometries, window, lat_edges, lon_edges, period)
 
-        matrix = cast_matrix(weighted_matrix(geometries, window, src_lat, src_lon, period), dtype)
+        with np.errstate(over="ignore"):
+            matrix = cast_matrix(weighted_matrix(geometries, window, src_lat, src_lon, period), dtype)
+        require_finite_coefficients(matrix)
         matrix.eliminate_zeros()
         h = hashlib.sha256(b"geohalo:weighted:1")
         h.update(geom_digest(geometries))
@@ -258,10 +261,11 @@ class ReduceOperator(NPZSerializable):
 
         ``descending=True`` reads its rows north to south, as :meth:`apply_grid`
         does. NaN is 0; a negative or infinite weight on a cell the operator
-        reads raises ValueError. Entries that become 0 are dropped and
-        ``row_sums`` are recomputed in float64 from the stored coefficients.
-        Only the cells the operator reads are looked at, and the digest covers
-        exactly those weights.
+        reads, or a scaled coefficient that overflows the operator's dtype,
+        raises ValueError. Entries that become 0 are dropped and ``row_sums``
+        are recomputed in float64 from the stored coefficients. Only the cells
+        the operator reads are looked at, and the digest covers exactly those
+        weights.
         """
         shape = (self.source_lat.size, self.source_lon.size)
         weights = np.asarray(cell_weights)
@@ -276,10 +280,12 @@ class ReduceOperator(NPZSerializable):
         scale[np.isnan(scale)] = 0.0
         if np.isinf(scale).any() or (scale < 0).any():
             raise ValueError("cell_weights must not be negative or infinite; NaN is read as 0")
-        scaled = (self.matrix.data.astype(np.float64) * scale).astype(self.matrix.dtype)
+        with np.errstate(over="ignore"):
+            scaled = (self.matrix.data.astype(np.float64) * scale).astype(self.matrix.dtype)
         matrix = sp.csr_matrix(
             (scaled, self.matrix.indices.copy(), self.matrix.indptr.copy()), shape=self.matrix.shape,
         )
+        require_finite_coefficients(matrix)
         matrix.eliminate_zeros()
         columns, first = np.unique(self.matrix.indices, return_index=True)
         h = hashlib.sha256(b"geohalo:reweighted:1")
