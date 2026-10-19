@@ -394,3 +394,155 @@ def test_geometries_that_are_not_polygons_in_degrees_are_refused():
     with pytest.raises(ValueError, match="EPSG:4326"):
         ghl.ReduceOperator.compute_weighted(_zones().set_crs("EPSG:3857", allow_override=True),
                                             lat, lon, people, *GRID)
+
+
+def _box_oracle(boxes, lat, lon, people, grid):
+    """Dense ``(n_boxes, n_source)`` people per box and ascending cell, for boxes on pixel edges."""
+    lat_edges = np.r_[grid[0][::-1] - (grid[0][0] - grid[0][1]) / 2, grid[0][0] + (grid[0][0] - grid[0][1]) / 2]
+    lon_edges = np.r_[grid[1] - (grid[1][1] - grid[1][0]) / 2, grid[1][-1] + (grid[1][1] - grid[1][0]) / 2]
+    row = np.searchsorted(lat_edges, lat) - 1
+    col = np.searchsorted(lon_edges, lon) - 1
+    on_grid = np.logical_and.outer((row >= 0) & (row < grid[0].size), (col >= 0) & (col < grid[1].size))
+    out = np.zeros((len(boxes), grid[0].size * grid[1].size))
+    for i, (west, south, east, north) in enumerate(boxes):
+        mask = np.logical_and.outer((lat > south) & (lat < north), (lon > west) & (lon < east)) & on_grid
+        cell = (row[:, None] * grid[1].size + col[None, :])[mask]
+        np.add.at(out[i], cell, people[mask])
+    return out
+
+
+@pytest.mark.parametrize(("grid", "on_grid"), [
+    (_grid(40.0, 45.0, 0.0, 5.0, 0.25), (43.0, 45.0, 3.0, 5.0)),
+    (_grid(45.0, 50.0, 5.0, 10.0, 0.25), (45.0, 47.0, 5.0, 7.0)),
+], ids=["window-past-the-north-east", "window-past-the-south-west"])
+def test_pixels_off_the_source_grid_count_for_nothing(grid, on_grid):
+    lat, lon = WINDOW
+    people = np.random.default_rng(7).random((lat.size, lon.size))
+    zone = gpd.GeoSeries([shapely.box(3.0, 43.0, 7.0, 47.0)], index=["across"])
+    op = ghl.ReduceOperator.compute_weighted(zone, lat, lon, people, *grid)
+    south, north, west, east = on_grid
+    expected = people[np.logical_and.outer((lat > south) & (lat < north), (lon > west) & (lon < east))].sum()
+    np.testing.assert_allclose(op.row_sums, [expected], rtol=1e-12)
+    np.testing.assert_allclose(op.matrix.toarray(), _box_oracle([(3.0, 43.0, 7.0, 47.0)], lat, lon, people, grid),
+                               rtol=1e-12, atol=1e-9)
+
+
+def test_a_grid_and_window_that_are_not_square_put_every_count_in_its_cell():
+    grid = _grid(40.0, 50.0, 0.0, 12.0, 0.25)  # 40 x 48 cells
+    lat, lon = _window(42.0, 2.0, 600, 960)  # 42-47 N, 2-10 E
+    people = np.random.default_rng(8).random((lat.size, lon.size))
+    boxes = [(8.5, 42.5, 9.75, 46.0), (2.25, 45.5, 3.0, 46.75), (4.1, 43.05, 7.3, 44.9)]
+    zones = gpd.GeoSeries([shapely.box(*b) for b in boxes], index=["b", "a", "c"])
+    op = ghl.ReduceOperator.compute_weighted(zones, lat, lon, people, *grid)
+    assert list(op.keys) == ["b", "a", "c"]
+    assert op.matrix.has_sorted_indices
+    np.testing.assert_allclose(op.matrix.toarray(), _box_oracle(boxes, lat, lon, people, grid), rtol=1e-12, atol=1e-9)
+
+
+def test_a_source_longitude_edge_between_pixel_edges_is_refused():
+    lat, lon = WINDOW
+    with pytest.raises(ValueError, match=r"longitude edge .* is not a pixel edge"):
+        ghl.ReduceOperator.compute_weighted(_zones(), lat, lon, np.ones((lat.size, lon.size)),
+                                            GRID[0], GRID[1] + 0.003)
+
+
+@pytest.mark.parametrize("bounds", [
+    (1.5, 44.0, 3.0, 45.0), (4.0, 41.5, 5.0, 43.0), (7.0, 44.0, 8.5, 45.0), (4.0, 47.0, 5.0, 48.5),
+], ids=["west", "south", "east", "north"])
+def test_a_geometry_leaving_the_window_on_any_side_is_refused(bounds):
+    lat, lon = WINDOW
+    with pytest.raises(ValueError, match="'out' leaves the weight window"):
+        ghl.ReduceOperator.compute_weighted(gpd.GeoSeries([shapely.box(*bounds)], index=["out"]),
+                                            lat, lon, np.ones((lat.size, lon.size)), *GRID)
+
+
+def test_the_digest_covers_the_geometries_the_window_and_the_source_grid():
+    lat, lon = WINDOW
+    people = _pixel_areas(lat, lon)
+    base = ghl.ReduceOperator.compute_weighted(_zones(), lat, lon, people, *GRID)
+    moved = _zones().translate(0.01, 0.0)
+    assert ghl.ReduceOperator.compute_weighted(moved, lat, lon, people, *GRID).digest != base.digest
+    shifted = ghl.ReduceOperator.compute_weighted(_zones(), lat + PIXEL, lon + PIXEL, people, *GRID)
+    assert shifted.digest != base.digest
+    wider = _grid(40.0, 50.0, 0.0, 12.0, 0.25)
+    assert ghl.ReduceOperator.compute_weighted(_zones(), lat, lon, people, *wider).digest != base.digest
+
+
+def test_a_negative_zero_count_is_a_zero_count():
+    lat, lon = WINDOW
+    people = np.random.default_rng(9).random((lat.size, lon.size))
+    people[::3, ::4] = 0.0
+    negative = people.copy()
+    negative[::3, ::4] = -0.0
+    one = ghl.ReduceOperator.compute_weighted(_zones(), lat, lon, people, *GRID)
+    other = ghl.ReduceOperator.compute_weighted(_zones(), lat, lon, negative, *GRID)
+    np.testing.assert_array_equal(one.matrix.toarray(), other.matrix.toarray())
+    assert one.digest == other.digest
+
+
+def test_a_weighted_operator_has_one_iteration():
+    assert ghl.ReduceOperator.compute_weighted(_zones(), *WINDOW, _pixel_areas(*WINDOW), *GRID).iterations == 1
+
+
+def test_reweight_digest_covers_the_operator_and_reads_negative_zero_as_zero():
+    stencil = ghl.Stencil.compute(*GRID, _zones())
+    single = ghl.ReduceOperator.compute(stencil, *GRID, dtype=np.float32)
+    double = ghl.ReduceOperator.compute(stencil, *GRID)
+    weights = np.random.default_rng(10).random((GRID[0].size, GRID[1].size))
+    assert single.reweight(weights).digest != double.reweight(weights).digest
+    read = np.unravel_index(double.matrix.indices[0], weights.shape)
+    zero, negative = weights.copy(), weights.copy()
+    zero[read], negative[read] = 0.0, -0.0
+    np.testing.assert_array_equal(double.reweight(zero).matrix.toarray(), double.reweight(negative).matrix.toarray())
+    assert double.reweight(zero).digest == double.reweight(negative).digest
+
+
+@pytest.mark.parametrize("bad", [-1.0, np.inf])
+def test_reweight_only_looks_at_cells_the_operator_reads(bad):
+    op = ghl.ReduceOperator.compute(ghl.Stencil.compute(*GRID, _zones()), *GRID)
+    weights = np.ones((GRID[0].size, GRID[1].size))
+    weights[0, 0] = bad
+    assert 0 not in op.matrix.indices
+    np.testing.assert_array_equal(op.reweight(weights).matrix.toarray(), op.matrix.toarray())
+    weights[np.unravel_index(op.matrix.indices[0], weights.shape)] = bad
+    with pytest.raises(ValueError, match="negative or infinite"):
+        op.reweight(weights)
+
+
+def test_reweight_keeps_the_iteration_count():
+    coarse = _grid(40.0, 50.0, 0.0, 10.0, 0.5)
+    op = ghl.ReduceOperator.compute(ghl.Stencil.compute(*GRID, _zones()), *coarse, iterations=2)
+    assert op.reweight(np.ones((coarse[0].size, coarse[1].size))).iterations == 2
+
+
+def _three():
+    names = (["a", "b"], ["c", "d"], ["e", "f"])
+    return [ghl.ReduceOperator.compute(ghl.Stencil.compute(*GRID, _zones().set_axis(pd.Index(n, name="zone"))), *GRID)
+            for n in names]
+
+
+def test_concat_digest_follows_the_order_and_every_part():
+    first, second, third = _three()
+    assert ghl.ReduceOperator.concat([first, second]).digest != ghl.ReduceOperator.concat([second, first]).digest
+    base = ghl.ReduceOperator.concat([first, second, third])
+    ones = np.ones((GRID[0].size, GRID[1].size))
+    for at in range(3):
+        parts = [first, second, third]
+        parts[at] = parts[at].reweight(ones)
+        np.testing.assert_array_equal(parts[at].matrix.toarray(), [first, second, third][at].matrix.toarray())
+        assert ghl.ReduceOperator.concat(parts).digest != base.digest
+
+
+@pytest.mark.parametrize("change", ["grid", "dtype", "iterations", "names"])
+def test_concat_checks_every_operator_against_the_first(change):
+    first, second, _ = _three()
+    keys = pd.Index(["e", "f"], name=None if change == "names" else "zone")
+    stencil = ghl.Stencil.compute(*GRID, _zones().set_axis(keys))
+    grid = _grid(40.0, 50.0, 0.0, 10.0, 0.5) if change == "grid" else GRID
+    odd = ghl.ReduceOperator.compute(
+        stencil, *grid, dtype=np.float32 if change == "dtype" else np.float64,
+        iterations=2 if change == "iterations" else 1,
+    )
+    with pytest.raises(ValueError, match={"grid": "source grid", "dtype": "dtype", "iterations": "iteration",
+                                          "names": "key names"}[change]):
+        ghl.ReduceOperator.concat([first, second, odd])
