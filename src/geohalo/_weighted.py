@@ -127,6 +127,37 @@ def require_inside(
         raise EmptyOverlapError(geometries.index[missed[0]])
 
 
+def cell_sums(
+    pixel: np.ndarray, coverage: np.ndarray, count: np.ndarray, width: int,
+    row_start: np.ndarray, col_offset: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """The ascending cells one geometry's pixels hit, and ``coverage * count`` summed into each in pixel order.
+
+    exactextract numbers pixels row-major from the raster's top (northern) row, ``width`` to a row.
+    """
+    cell = row_start[pixel // width]
+    cell += col_offset[pixel % width]
+    people = np.multiply(coverage, count, dtype=np.float64)
+    inside = cell >= 0
+    if not inside.all():
+        cell, people = cell[inside], people[inside]
+    del inside
+    if not cell.size:
+        return np.zeros(0, dtype=np.int64), np.zeros(0)
+    order = np.argsort(cell)
+    ordered = cell[order]
+    del cell
+    first = np.empty(ordered.size, dtype=bool)
+    first[0] = True
+    np.not_equal(ordered[1:], ordered[:-1], out=first[1:])
+    cells = ordered[first]
+    del ordered
+    slot = np.empty(order.size, dtype=np.intp)
+    slot[order] = np.cumsum(first) - 1
+    del order, first
+    return cells, np.bincount(slot, weights=people, minlength=cells.size)
+
+
 def weighted_matrix(
     geometries: gpd.GeoSeries, window: Window, source_lat: np.ndarray, source_lon: np.ndarray, period: float | None,
 ) -> sp.csr_matrix:
@@ -139,9 +170,13 @@ def weighted_matrix(
     """
     lat_edges, lon_edges = midpoint_edges(source_lat), midpoint_edges(source_lon)
     lon = window.lon if period is None else lon_edges[0] + np.mod(window.lon - lon_edges[0], period)
+    n_lat, n_lon = source_lat.size, source_lon.size
     cell_row = np.searchsorted(lat_edges, window.lat, side="right") - 1
     cell_col = np.searchsorted(lon_edges, lon, side="right") - 1
-    n_lat, n_lon = source_lat.size, source_lon.size
+    # Flat cell id = row_start[pixel row] + col_offset[pixel column]; a pixel off the grid sums below 0.
+    off = -(n_lat + 1) * n_lon
+    row_start = np.where((cell_row >= 0) & (cell_row < n_lat), cell_row * n_lon, off)
+    col_offset = np.where((cell_col >= 0) & (cell_col < n_lon), cell_col, off)
     raster = NumPyRasterSource(
         window.counts, xmin=window.west, ymin=window.south, xmax=window.east, ymax=window.north, nodata=0,
     )
@@ -157,21 +192,12 @@ def weighted_matrix(
         for offset, (pixel, coverage, count) in enumerate(
             zip(frame["cell_id"], frame["coverage"], frame["values"], strict=True),
         ):
-            # exactextract numbers pixels row-major from the raster's top (northern) row.
-            pixel_row, pixel_col = np.divmod(np.asarray(pixel, dtype=np.int64), window.lon.size)
-            rows, cols = cell_row[pixel_row], cell_col[pixel_col]
-            inside = (rows >= 0) & (rows < n_lat) & (cols >= 0) & (cols < n_lon)
-            if not inside.any():
-                continue
-            rows, cols = rows[inside], cols[inside]
-            people = np.asarray(coverage, dtype=np.float64)[inside] * np.asarray(count, dtype=np.float64)[inside]
-            row0, col0 = rows.min(), cols.min()
-            width = cols.max() - col0 + 1
-            sums = np.bincount((rows - row0) * width + (cols - col0), weights=people)
-            local = np.flatnonzero(sums)
-            data.append(sums[local])
-            indices.append((local // width + row0) * n_lon + local % width + col0)
-            counts[start + offset] = local.size
+            cells, sums = cell_sums(np.asarray(pixel, dtype=np.int64), coverage, count, window.lon.size,
+                                    row_start, col_offset)
+            hit = sums != 0
+            data.append(sums[hit])
+            indices.append(cells[hit])
+            counts[start + offset] = np.count_nonzero(hit)
         del frame
     return sp.csr_matrix(
         (
