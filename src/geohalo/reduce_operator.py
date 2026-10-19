@@ -26,7 +26,14 @@ from numpy.typing import DTypeLike
 
 from geohalo._serialization import NPZSerializable
 from geohalo._sparse import GridMatrix, cast_matrix, operator_dtype, stored_row_sums
-from geohalo._weighted import counts_digest, require_inside, require_nested, weight_window, weighted_matrix
+from geohalo._weighted import (
+    counts_digest,
+    periodic_shifts,
+    require_inside,
+    require_nested,
+    weight_window,
+    weighted_matrix,
+)
 from geohalo.geometry import (
     _validate_period,
     ensure_ascending_lats,
@@ -169,6 +176,7 @@ class ReduceOperator(NPZSerializable):
         source_lon: np.ndarray,
         *,
         dtype: DTypeLike = np.float64,
+        period: float | None = None,
     ) -> "ReduceOperator":
         """Weight each geometry's cells by the counts of a fine lattice that nests in the source grid.
 
@@ -184,15 +192,23 @@ class ReduceOperator(NPZSerializable):
         has shape ``(weight_lat.size, weight_lon.size)`` in that order and holds
         counts per pixel. NaN is 0; negative or infinite counts raise
         ValueError. ``source_lat`` may run either way and is stored ascending,
-        as in :meth:`compute`. Longitudes are not wrapped: pixels outside the
-        source grid, and the counts in them, are dropped.
+        as in :meth:`compute`.
 
-        Raises ValueError when a source cell edge inside the window is not a
-        pixel edge (1e-9 degrees), or when a geometry's bounds leave the window;
-        EmptyOverlapError when a geometry covers no area of the source grid
-        inside the window. A geometry whose pixels all weigh 0 has a row of
-        zeros (no stored entries), which a mean with ``skipna=True`` answers as
-        NaN.
+        A pixel counts in the source cell that holds its centre. Without
+        ``period``, the window and the source longitudes are read in one frame,
+        and the part of a geometry outside the source grid is not counted, as
+        with :meth:`compute`: a pixel whose centre is off the grid is dropped
+        with its count. ``period=360`` moves each pixel centre by a multiple of
+        360 onto the source grid's frame first, so a window across 0° reaches a
+        0..360 grid; it is validated as in :meth:`compute` and is part of the
+        digest.
+
+        Raises ValueError when a source cell edge inside the window, or a copy
+        of it ``period`` apart, is not a pixel edge (1e-9 degrees), or when a
+        geometry's bounds leave the window; EmptyOverlapError when a geometry
+        covers no area of the source grid inside the window. A geometry whose
+        pixels all weigh 0 has a row of zeros (no stored entries), which a mean
+        with ``skipna=True`` answers as NaN.
         """
         dtype = operator_dtype(dtype)
         if not isinstance(geometries, gpd.GeoSeries):
@@ -210,12 +226,14 @@ class ReduceOperator(NPZSerializable):
         require_regular_grid(src_lon, "longitude")
         if src_lon.size > 1 and src_lon[0] > src_lon[-1]:
             raise ValueError("source_lon must ascend")
+        period = _validate_period(src_lon, period)
         lat_edges, lon_edges = midpoint_edges(src_lat), midpoint_edges(src_lon)
+        shifts = periodic_shifts(lon_edges, window.west, window.east, period)
         require_nested(lat_edges, window.south, window.lat_step, window.north, "latitude")
-        require_nested(lon_edges, window.west, window.lon_step, window.east, "longitude")
-        require_inside(geometries, window, lat_edges, lon_edges)
+        require_nested((lon_edges + shifts[:, None]).ravel(), window.west, window.lon_step, window.east, "longitude")
+        require_inside(geometries, window, lat_edges, lon_edges, period)
 
-        matrix = cast_matrix(weighted_matrix(geometries, window, src_lat, src_lon), dtype)
+        matrix = cast_matrix(weighted_matrix(geometries, window, src_lat, src_lon, period), dtype)
         matrix.eliminate_zeros()
         h = hashlib.sha256(b"geohalo:weighted:1")
         h.update(geom_digest(geometries))
@@ -223,6 +241,8 @@ class ReduceOperator(NPZSerializable):
         h.update(counts_digest(window))
         h.update(grid_digest(src_lat, src_lon))
         h.update(dtype.name.encode())
+        if period is not None:
+            h.update(b"period:" + np.float64(period).tobytes())
         return cls(
             matrix=matrix,
             row_sums=stored_row_sums(matrix),

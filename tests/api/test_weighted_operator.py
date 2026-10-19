@@ -546,3 +546,76 @@ def test_concat_checks_every_operator_against_the_first(change):
     with pytest.raises(ValueError, match={"grid": "source grid", "dtype": "dtype", "iterations": "iteration",
                                           "names": "key names"}[change]):
         ghl.ReduceOperator.concat([first, second, odd])
+
+
+GLOBAL_EAST = (_grid(40.0, 50.0, 0.0, 10.0, 0.25)[0], np.arange(-179.875, 180.0, 0.25))
+GLOBAL_360 = (GLOBAL_EAST[0], np.arange(0.125, 360.0, 0.25))
+ACROSS_ZERO = _window(44.0, -2.0, 240, 480)  # 44-46 N, 2 W-2 E
+
+
+def _across_zero():
+    lat, lon = ACROSS_ZERO
+    people = np.random.default_rng(11).random((lat.size, lon.size))
+    zones = gpd.GeoSeries([shapely.Point(0.0, 45.0).buffer(0.8), shapely.box(-1.0, 44.5, 1.0, 45.5)],
+                          index=["disc", "box"])
+    return zones, lat, lon, people
+
+
+def test_period_wraps_pixels_west_of_a_0_to_360_grid_onto_it():
+    zones, lat, lon, people = _across_zero()
+    east = ghl.ReduceOperator.compute_weighted(zones, lat, lon, people, *GLOBAL_EAST)
+    wrapped = ghl.ReduceOperator.compute_weighted(zones, lat, lon, people, *GLOBAL_360, period=360)
+    shape = (GLOBAL_EAST[0].size, GLOBAL_EAST[1].size)
+    for row in range(len(zones)):
+        np.testing.assert_array_equal(wrapped.matrix[row].toarray().reshape(shape),
+                                      np.roll(east.matrix[row].toarray().reshape(shape), 720, axis=1))
+    np.testing.assert_allclose(wrapped.row_sums, east.row_sums, rtol=1e-14)
+    in_box = np.logical_and.outer((lat > 44.5) & (lat < 45.5), (lon > -1.0) & (lon < 1.0))
+    np.testing.assert_allclose(wrapped.row_sums[1], people[in_box].sum(), rtol=1e-12)
+
+
+def test_without_a_period_a_0_to_360_grid_counts_only_the_part_on_it():
+    zones, lat, lon, people = _across_zero()
+    partial = ghl.ReduceOperator.compute_weighted(zones, lat, lon, people, *GLOBAL_360)
+    on_grid = np.logical_and.outer((lat > 44.5) & (lat < 45.5), (lon > 0.0) & (lon < 1.0))
+    np.testing.assert_allclose(partial.row_sums[1], people[on_grid].sum(), rtol=1e-12)
+    assert np.all(np.divmod(partial.matrix.indices, GLOBAL_360[1].size)[1] < 8)
+
+
+def test_period_reaches_a_geometry_wholly_west_of_a_0_to_360_grid():
+    _, lat, lon, people = _across_zero()
+    west = gpd.GeoSeries([shapely.box(-1.5, 44.5, -0.5, 45.5)], index=["west"])
+    with pytest.raises(ghl.EmptyOverlapError, match="'west'"):
+        ghl.ReduceOperator.compute_weighted(west, lat, lon, people, *GLOBAL_360)
+    op = ghl.ReduceOperator.compute_weighted(west, lat, lon, people, *GLOBAL_360, period=360.0)
+    inside = np.logical_and.outer((lat > 44.5) & (lat < 45.5), (lon > -1.5) & (lon < -0.5))
+    np.testing.assert_allclose(op.row_sums, [people[inside].sum()], rtol=1e-12)
+
+
+def test_period_checks_nesting_on_the_grid_s_wrapped_edges():
+    _, lat, lon, people = _across_zero()
+    west = gpd.GeoSeries([shapely.box(-1.5, 44.5, -0.5, 45.5)], index=["west"])
+    with pytest.raises(ValueError, match=r"longitude edge .* is not a pixel edge"):
+        ghl.ReduceOperator.compute_weighted(west, lat, lon[lon < 0], people[:, lon < 0],
+                                            GLOBAL_360[0], GLOBAL_360[1] + 0.003, period=360)
+
+
+def test_the_digest_covers_the_period():
+    zones, lat, lon, people = _across_zero()
+    plain = ghl.ReduceOperator.compute_weighted(zones, lat, lon, people, *GLOBAL_EAST)
+    periodic = ghl.ReduceOperator.compute_weighted(zones, lat, lon, people, *GLOBAL_EAST, period=360)
+    np.testing.assert_array_equal(plain.matrix.toarray(), periodic.matrix.toarray())
+    assert plain.digest != periodic.digest
+    assert ghl.ReduceOperator.compute_weighted(zones, lat, lon, people, *GLOBAL_EAST, period=720).digest \
+        != periodic.digest
+    assert ghl.ReduceOperator.compute_weighted(
+        zones, lat, lon, people, *GLOBAL_EAST, period=np.float32(360)).digest == periodic.digest
+
+
+@pytest.mark.parametrize(("period", "message"), [
+    (0, "finite and > 0"), (np.nan, "finite and > 0"), (180, "span less than period"),
+])
+def test_a_period_compute_would_refuse_is_refused(period, message):
+    zones, lat, lon, people = _across_zero()
+    with pytest.raises(ValueError, match=message):
+        ghl.ReduceOperator.compute_weighted(zones, lat, lon, people, *GLOBAL_360, period=period)
