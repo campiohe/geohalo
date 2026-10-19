@@ -37,20 +37,29 @@ class Window:
         return (self.east - self.west) / self.lon.size
 
 
+def real_array(values: np.ndarray, name: str) -> np.ndarray:
+    """``values`` as an array of real numbers; a masked array's masked entries become NaN."""
+    array = np.asarray(values)
+    if array.dtype.kind not in "fiu":
+        raise TypeError(f"{name} must be real numbers, got {array.dtype}")
+    mask = np.ma.getmask(values)
+    if mask is not np.ma.nomask and mask.any():
+        array = np.where(mask, np.nan, array if array.dtype.kind == "f" else array.astype(np.float64))
+    return array
+
+
 def weight_window(weight_lat: np.ndarray, weight_lon: np.ndarray, weights: np.ndarray) -> Window:
     """Validate a window of counts and orient it north to south, as exactextract reads a raster.
 
-    Float32 and float64 counts already north to south are not copied.
+    Float32 and float64 counts already north to south are not copied. A masked array's masked counts are NaN.
     """
     lat = np.asarray(weight_lat, dtype=np.float64)
     lon = np.asarray(weight_lon, dtype=np.float64)
     if lat.ndim != 1 or lon.ndim != 1 or lat.size < 2 or lon.size < 2:
         raise ValueError("weight_lat and weight_lon must be one-dimensional with at least two pixels each")
-    counts = np.asarray(weights)
+    counts = real_array(weights, "weights")
     if counts.shape != (lat.size, lon.size):
         raise ValueError(f"weights must have shape {(lat.size, lon.size)}, got {counts.shape}")
-    if counts.dtype.kind not in "fiu":
-        raise TypeError(f"weights must be real numbers, got {counts.dtype}")
     if counts.dtype not in (np.dtype(np.float32), np.dtype(np.float64)):
         counts = counts.astype(np.float64)
     if np.isinf(counts).any() or (counts < 0).any():

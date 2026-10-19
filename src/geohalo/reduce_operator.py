@@ -29,6 +29,7 @@ from geohalo._sparse import GridMatrix, cast_matrix, operator_dtype, require_fin
 from geohalo._weighted import (
     counts_digest,
     periodic_shifts,
+    real_array,
     require_inside,
     require_nested,
     weight_window,
@@ -190,9 +191,9 @@ class ReduceOperator(NPZSerializable):
         ``weight_lat``/``weight_lon`` are the centres of a regular window of the
         lattice, latitude in either order and longitude ascending; ``weights``
         has shape ``(weight_lat.size, weight_lon.size)`` in that order and holds
-        counts per pixel. NaN is 0; negative or infinite counts raise
-        ValueError. ``source_lat`` may run either way and is stored ascending,
-        as in :meth:`compute`.
+        counts per pixel. NaN and masked counts are 0; negative or infinite
+        counts raise ValueError. ``source_lat`` may run either way and is stored
+        ascending, as in :meth:`compute`.
 
         A pixel counts in the source cell that holds its centre. Without
         ``period``, the window and the source longitudes are read in one frame,
@@ -260,19 +261,17 @@ class ReduceOperator(NPZSerializable):
         """Scale each column by its cell's weight; ``cell_weights`` has the source grid's shape.
 
         ``descending=True`` reads its rows north to south, as :meth:`apply_grid`
-        does. NaN is 0; a negative or infinite weight on a cell the operator
-        reads, or a scaled coefficient that overflows the operator's dtype,
-        raises ValueError. Entries that become 0 are dropped and ``row_sums``
-        are recomputed in float64 from the stored coefficients. Only the cells
-        the operator reads are looked at, and the digest covers exactly those
-        weights.
+        does. NaN and masked weights are 0; a negative or infinite weight on a
+        cell the operator reads, or a scaled coefficient that overflows the
+        operator's dtype, raises ValueError. Entries that become 0 are dropped
+        and ``row_sums`` are recomputed in float64 from the stored
+        coefficients. Only the cells the operator reads are looked at, and the
+        digest covers exactly those weights.
         """
         shape = (self.source_lat.size, self.source_lon.size)
-        weights = np.asarray(cell_weights)
+        weights = real_array(cell_weights, "cell_weights")
         if weights.shape != shape:
             raise ValueError(f"cell_weights must have shape {shape}, got {weights.shape}")
-        if weights.dtype.kind not in "fiu":
-            raise TypeError(f"cell_weights must be real numbers, got {weights.dtype}")
         rows, cols = np.divmod(self.matrix.indices, shape[1])
         if descending:
             rows = shape[0] - 1 - rows

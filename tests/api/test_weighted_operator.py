@@ -653,3 +653,29 @@ def test_compute_weighted_refuses_coefficients_that_overflow_their_dtype(dtype, 
     people = np.full((lat.size, lon.size), count, dtype=dtype)
     with pytest.raises(ValueError, match=f"overflow {np.dtype(dtype).name}"):
         ghl.ReduceOperator.compute_weighted(_zones(), lat, lon, people, *GRID, dtype=dtype)
+
+
+@pytest.mark.parametrize("dtype", [np.float32, np.float64, np.int64])
+def test_masked_counts_count_as_nobody(dtype):
+    lat, lon = WINDOW
+    rng = np.random.default_rng(12)
+    people = rng.integers(0, 50, size=(lat.size, lon.size)).astype(dtype)
+    hidden = rng.random(people.shape) < 0.3
+    masked = np.ma.masked_array(np.where(hidden, -1, people).astype(dtype), mask=hidden)
+    holes = np.where(hidden, np.nan, people.astype(np.float64))
+    one = ghl.ReduceOperator.compute_weighted(_zones(), lat, lon, masked, *GRID)
+    other = ghl.ReduceOperator.compute_weighted(_zones(), lat, lon, holes, *GRID)
+    np.testing.assert_array_equal(one.matrix.toarray(), other.matrix.toarray())
+    assert one.digest == other.digest
+
+
+def test_masked_cell_weights_weigh_nothing():
+    op = ghl.ReduceOperator.compute(ghl.Stencil.compute(*GRID, _zones()), *GRID)
+    rng = np.random.default_rng(13)
+    weights = rng.random((GRID[0].size, GRID[1].size))
+    hidden = rng.random(weights.shape) < 0.3
+    masked = np.ma.masked_array(np.where(hidden, -1.0, weights), mask=hidden)
+    one = op.reweight(masked, descending=True)
+    other = op.reweight(np.where(hidden, np.nan, weights), descending=True)
+    np.testing.assert_array_equal(one.matrix.toarray(), other.matrix.toarray())
+    assert one.digest == other.digest
